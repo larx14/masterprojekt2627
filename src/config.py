@@ -14,8 +14,9 @@ if not api_key:
 
 # 3. Claude-Modell konfigurieren
 # Der API-Key wird automatisch aus ANTHROPIC_API_KEY gelesen.
-model = ChatAnthropic(
+llm = ChatAnthropic(
     model="claude-haiku-5-5",
     max_tokens=300
 )
+
 

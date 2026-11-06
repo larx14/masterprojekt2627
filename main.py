@@ -1,7 +1,7 @@
-from src.config import model
+from src.config import llm 
 
 # Claude direkt verwenden
-antwort = model.invoke(
+antwort = llm.invoke(
     "Erkläre mir in zwei Sätzen, was LangChain ist."
 )
  
