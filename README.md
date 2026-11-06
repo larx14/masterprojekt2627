@@ -14,24 +14,12 @@ Diese Anleitung beschreibt, wie du das Projekt lokal einrichtest und startklar m
 
 ### 1. Repository lokal klonen
 
-```bash
-git clone <REPO-URL>
-cd <REPO-ORDNER>
-```
+(sehr easy mit GitHub Desktop) 
 
 ### 2. Git installieren (falls noch nicht vorhanden)
 
-Prüfen, ob Git installiert ist:
-
-```bash
-git --version
-```
-
-Falls nicht, Git von [git-scm.com](https://git-scm.com/downloads) herunterladen und installieren.
 
 ### 3. Git-Extension in VS Code installieren
-
-In VS Code den Extensions-Tab öffnen (`Strg + Shift + X`) und nach einer Git-Extension suchen (z. B. **Git Extension Pack** oder **GitLens**), anschließend installieren.
 
 ### 4. Python 3.12.x installieren
 
