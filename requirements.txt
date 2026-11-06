@@ -1,0 +1,8 @@
+#Installieren vom pipreqs Tool
+#python -m pip install pipreqs
+
+#Analysieren von Dependencies im Projekt und ergänzen in requirements.txt
+#python -m pipreqs.pipreqs . --force --ignore .venv
+
+#Installieren der dependencies in diesem Dokument
+#python -m pip install -r requirements.txt
