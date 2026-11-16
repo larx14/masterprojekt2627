@@ -270,7 +270,7 @@ def planner(state: PlanningState) -> dict:
         "event": "plan_created",
         "goal": result.goal,
         "proposed_steps": proposed_steps,
-        "accepted_steps": steps,
+        "forwarded_steps": steps,
         "missing_info": result.missing_info,
         "abort_reason": result.abort_reason,
         "status": status,
