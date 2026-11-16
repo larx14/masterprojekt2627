@@ -10,11 +10,11 @@ load_dotenv(find_dotenv())
  
 
 conninfo = make_conninfo(
-    host=os.getenv("DB_HOST", "aws-1-eu-north-1.pooler.supabase.com"),
-    port=os.getenv("DB_PORT", "5432"),
-    dbname=os.getenv("DB_NAME", "postgres"),
-    user=os.getenv("DB_USER", "postgres.rskembdptlsealzehbgg"),
-    password=os.getenv("DB_PASSWORD", "Masterprojekt1245")
+    host=os.getenv("DB_HOST"),
+    port=os.getenv("DB_PORT"),
+    dbname=os.getenv("DB_NAME"),
+    user=os.getenv("DB_USER"),
+    password=os.getenv("DB_PASSWORD")
 )
 
 # Eine gemeinsame Verbindung für alles

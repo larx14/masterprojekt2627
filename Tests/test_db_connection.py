@@ -20,3 +20,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+##"python test_db_connection.py" in der Konsole ausführen, um den Test zu starten.#

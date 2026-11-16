@@ -1,10 +1,11 @@
 import sys
 from pathlib import Path
 
+# Das hier muss man hinzufügen, weil er sonst nicht die Module aus anderen Projektordnern findet
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from config.llm_client import get_deepseek
+from config.llm_connection import get_deepseek
 
 def test_deepseek():
 
@@ -38,3 +39,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+##"python test_llm_connection.py" in der Konsole ausführen, um den Test zu starten.#

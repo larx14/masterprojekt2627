@@ -1,8 +1,10 @@
 
-import uuid
-from config.db_client import db
 
-#Die Funktion erstellt eine unique Prozess-ID#
+#In dieser Klasse befinden sich Methoden, die einen neuen Prozesse in der Datenbank anlegen oder auslesen#
+
+import uuid
+from config.db_connection import db
+
 def create_process_id():
     return str(uuid.uuid4())
 

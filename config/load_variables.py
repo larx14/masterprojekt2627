@@ -1,4 +1,3 @@
-
 import os
 from dotenv import load_dotenv, find_dotenv
 
@@ -9,7 +8,7 @@ load_dotenv(find_dotenv())
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
 
-# ERPNext Zugangsdaten
+# ERPNext Zugangsdaten 
 ERPNEXT_URL = os.getenv("ERPNEXT_URL")
 ERPNEXT_API_KEY = os.getenv("ERPNEXT_API_KEY")
 ERPNEXT_API_SECRET = os.getenv("ERPNEXT_API_SECRET")

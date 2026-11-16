@@ -1,6 +1,6 @@
 from langchain_deepseek import ChatDeepSeek
 
-from config.settings import (
+from config.load_variables import (
     DEEPSEEK_API_KEY
 )
 
