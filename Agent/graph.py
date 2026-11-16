@@ -11,14 +11,22 @@ from Agent.nodes.planner_node import planner
 from Agent.nodes.plan_validator_node import plan_validator
 
 
+
+from typing import Literal
+
+from langgraph.graph import StateGraph, START, END
+
+from Agent.state import PlanningState
+from Agent.nodes.planner_node import planner
+from Agent.nodes.plan_validator_node import plan_validator
+from Agent.nodes.action_preparer_node import action_preparer
+
+
 def route_after_planner(
     state: PlanningState
 ) -> Literal["validate", "end"]:
     """
-    Route successfully planned tasks to the Plan Validator.
-
-    Stop the workflow if planning failed or requires
-    additional human information.
+    Route successful planning results to the validator.
     """
 
     if state.get("status") == "planned":
@@ -27,35 +35,54 @@ def route_after_planner(
     return "end"
 
 
+def route_after_validation(
+    state: PlanningState
+) -> Literal["prepare", "end"]:
+    """
+    Prepare an action only after successful validation.
+    """
+
+    if (
+        state.get("status") == "plan_valid"
+        and state.get("plan_valid") is True
+    ):
+        return "prepare"
+
+    return "end"
+
+
 def build_planning_graph(checkpointer=None):
     """
-    Build and compile the planning workflow.
-
-    An optional checkpointer can be provided by
-    the application's database integration.
+    Build and compile the preliminary agent graph.
     """
 
     builder = StateGraph(PlanningState)
 
-    # Register the independent nodes.
     builder.add_node("planner", planner)
     builder.add_node("plan_validator", plan_validator)
+    builder.add_node("action_preparer", action_preparer)
 
-    # Define the entry point.
     builder.add_edge(START, "planner")
 
-    # Validate only successfully generated plans.
     builder.add_conditional_edges(
         "planner",
         route_after_planner,
         {
             "validate": "plan_validator",
-            "end": END,
+            "end": END
         }
     )
 
-    # Stop after plan validation.
-    builder.add_edge("plan_validator", END)
+    builder.add_conditional_edges(
+        "plan_validator",
+        route_after_validation,
+        {
+            "prepare": "action_preparer",
+            "end": END
+        }
+    )
+
+    builder.add_edge("action_preparer", END)
 
     return builder.compile(checkpointer=checkpointer)
 

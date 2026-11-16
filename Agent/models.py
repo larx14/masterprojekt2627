@@ -1,8 +1,10 @@
 """
 This file defines the output format of the planner node, using pydantic (for JSON)
+It also defines the putput of the action preparer node (Prepared action)
 """
 
 from pydantic import BaseModel, Field
+from typing import Any
 
 """
 A plan step consits of an ID, the tool that is used during the step, a description of the step's goal and which steps it depends on (their ID)
@@ -83,6 +85,48 @@ class Plan(BaseModel):
         description=(
             "Reason why the requested business goal cannot "
             "be achieved with the available capabilities"
+        )
+    )
+
+
+class PreparedAction(BaseModel):
+    """
+    Represent a proposed tool invocation for one plan step.
+    """
+
+    tool: str = Field(
+        description="Exact name of the tool to invoke"
+    )
+
+    args: dict[str, Any] = Field(
+        default_factory=dict,
+        description=(
+            "Arguments for the selected tool, using "
+            "the exact parameter names from its specification"
+        )
+    )
+
+    missing_info: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Required arguments that cannot be determined "
+            "from the available information"
+        )
+    )
+
+    reason: str = Field(
+        description=(
+            "Brief justification for selecting the "
+            "provided argument values"
+        )
+    )
+
+    confidence: float = Field(
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Self-reported confidence in the prepared "
+            "arguments, between 0 and 1"
         )
     )
 
