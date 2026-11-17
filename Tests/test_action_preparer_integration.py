@@ -8,8 +8,9 @@ Uses the configured LLM but does not execute ERPNext tools.
 import json
 
 from Agent.graph import build_planning_graph
+from Tests.mock_tools import MOCK_TOOLS as t
 
-
+tools = t 
 def test_complete_planning_pipeline():
     graph = build_planning_graph()
 
@@ -18,31 +19,7 @@ def test_complete_planning_pipeline():
             "Create a new customer named Example GmbH "
             "and prepare a sales order for 5 units of Item A."
         ),
-        "available_tools": [
-            {
-                "name": "find_customer",
-                "description": "Search for an existing customer.",
-                "parameters": {"customer_name": "str"}
-            },
-            {
-                "name": "create_customer",
-                "description": "Create a customer.",
-                "parameters": {"customer_name": "str"}
-            },
-            {
-                "name": "find_item",
-                "description": "Search for an existing item.",
-                "parameters": {"search": "str"}
-            },
-            {
-                "name": "create_sales_order",
-                "description": "Create a sales order.",
-                "parameters": {
-                    "customer": "str",
-                    "items": "list"
-                }
-            }
-        ],
+        "available_tools": tools ,
         "facts": {},
         "artifacts": {},
         "step_results": {},
@@ -71,6 +48,12 @@ def test_complete_planning_pipeline():
         entry["event"]
         for entry in result.get("history", [])
     ])
+
+
+     # Print validation errors for debugging
+    print("\nVALIDATION ERRORS:")
+    for error in result.get("validation_errors", []):
+        print("-", error)
 
     assert result["status"] == "action_prepared"
     assert result["plan_valid"] is True

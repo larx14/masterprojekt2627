@@ -1,6 +1,11 @@
 
 """
 Unit tests for the generic Plan Validator Node.
+
+The tests verify structural plan validation, tool references,
+step dependencies, and deterministic execution conditions.
+
+No LLM or ERPNext connection is required.
 """
 
 from copy import deepcopy
@@ -12,9 +17,27 @@ BASE_STATE = {
     "status": "planned",
     "goal": "A sales order is created.",
     "available_tools": [
-        {"name": "find_customer"},
-        {"name": "create_customer"},
-        {"name": "create_sales_order"}
+        {
+            "name": "find_customer",
+            "result_fields": {
+                "customer_exists": "bool",
+                "customer_id": "str"
+            }
+        },
+        {
+            "name": "create_customer",
+            "result_fields": {
+                "customer_created": "bool",
+                "customer_id": "str"
+            }
+        },
+        {
+            "name": "create_sales_order",
+            "result_fields": {
+                "sales_order_created": "bool",
+                "sales_order_id": "str"
+            }
+        }
     ],
     "plan": [
         {
@@ -32,9 +55,17 @@ BASE_STATE = {
             "description": "Create the customer if necessary.",
             "reason": "A customer record is required.",
             "depends_on": ["step_1"],
-            "execution_condition": (
-                "Only if step_1 found no customer"
-            ),
+            "execution_condition": {
+                "all": [
+                    {
+                        "source_step": "step_1",
+                        "field": "customer_exists",
+                        "operator": "eq",
+                        "value": False
+                    }
+                ],
+                "any": []
+            },
             "status": "pending"
         },
         {
@@ -52,6 +83,10 @@ BASE_STATE = {
     "history": []
 }
 
+
+# --------------------------------------------------
+# Existing structural validation tests
+# --------------------------------------------------
 
 def test_valid_plan():
     state = deepcopy(BASE_STATE)
@@ -138,3 +173,102 @@ def test_empty_plan():
     result = plan_validator(state)
 
     assert result["plan_valid"] is False
+
+
+# --------------------------------------------------
+# New execution condition validation tests
+# --------------------------------------------------
+
+def test_unknown_condition_source():
+    """
+    Reject a condition referencing a nonexistent step.
+    """
+    state = deepcopy(BASE_STATE)
+
+    state["plan"][1]["execution_condition"]["all"][0][
+        "source_step"
+    ] = "step_99"
+
+    result = plan_validator(state)
+
+    assert result["plan_valid"] is False
+    assert any(
+        "unknown condition source" in error.lower()
+        for error in result["validation_errors"]
+    )
+
+
+def test_condition_source_not_in_dependencies():
+    """
+    Reject a condition referencing a step that is not
+    declared as a prerequisite.
+    """
+    state = deepcopy(BASE_STATE)
+
+    state["plan"][1]["depends_on"] = []
+
+    result = plan_validator(state)
+
+    assert result["plan_valid"] is False
+    assert any(
+        "must be listed in depends_on" in error.lower()
+        for error in result["validation_errors"]
+    )
+
+
+def test_unknown_result_field():
+    """
+    Reject a condition referencing a result field
+    that is not defined in the tool specification.
+    """
+    state = deepcopy(BASE_STATE)
+
+    state["plan"][1]["execution_condition"]["all"][0][
+        "field"
+    ] = "unknown_field"
+
+    result = plan_validator(state)
+
+    assert result["plan_valid"] is False
+    assert any(
+        "unknown result field" in error.lower()
+        for error in result["validation_errors"]
+    )
+
+
+def test_condition_value_type_mismatch():
+    """
+    Reject a comparison with an incompatible expected value.
+    """
+    state = deepcopy(BASE_STATE)
+
+    state["plan"][1]["execution_condition"]["all"][0][
+        "value"
+    ] = "false"
+
+    result = plan_validator(state)
+
+    assert result["plan_valid"] is False
+    assert any(
+        "type mismatch" in error.lower()
+        for error in result["validation_errors"]
+    )
+
+
+def test_invalid_condition_operator():
+    """
+    Reject unsupported comparison operators.
+    """
+    state = deepcopy(BASE_STATE)
+
+    state["plan"][1]["execution_condition"]["all"][0][
+        "operator"
+    ] = "contains"
+
+    result = plan_validator(state)
+
+    assert result["plan_valid"] is False
+    assert any(
+        "invalid step" in error.lower()
+        for error in result["validation_errors"]
+    )

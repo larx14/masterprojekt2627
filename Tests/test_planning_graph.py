@@ -9,33 +9,8 @@ Does not execute ERPNext operations.
 import json
 
 from Agent.graph import build_planning_graph
+from Tests.mock_tools import MOCK_TOOLS 
 
-
-MOCK_TOOLS = [
-    {
-        "name": "find_customer",
-        "description": "Search for an existing customer.",
-        "parameters": {"customer_name": "str"},
-    },
-    {
-        "name": "create_customer",
-        "description": "Create a customer record.",
-        "parameters": {"customer_name": "str"},
-    },
-    {
-        "name": "find_item",
-        "description": "Search for an existing item.",
-        "parameters": {"search": "str"},
-    },
-    {
-        "name": "create_sales_order",
-        "description": "Create a sales order.",
-        "parameters": {
-            "customer": "str",
-            "items": "list",
-        },
-    },
-]
 
 
 def test_planner_validator_integration():
@@ -85,10 +60,15 @@ def test_planner_validator_integration():
     ))
 
     # Verify that planning completed successfully.
-    assert result["status"] == "plan_valid", (
-        f"Unexpected workflow status: "
-        f"{result.get('status')}"
-    )
+    assert result["status"] == "action_prepared", (
+        f"Unexpected workflow status: {result.get('status')}"
+     )
+
+    assert result["plan_valid"] is True
+    assert result["validation_errors"] == []
+
+    assert result["prepared_action"]["tool"] == "find_customer"
+    assert result["prepared_action"]["args"]["customer_name"] == "Example GmbH"
 
     # Verify that the validator approved the plan.
     assert result["plan_valid"] is True
@@ -113,9 +93,17 @@ def test_planner_validator_integration():
 
     assert "plan_created" in events
     assert "plan_validated" in events
+    assert "condition_evaluated" in events
+    assert "action_prepared" in events
 
     # Verify that no action was prepared or executed.
-    assert not result.get("prepared_action")
+    # Verify that the first action was prepared correctly.
+    assert result["prepared_action"]["step_id"] == result["plan"][0]["id"]
+    assert result["prepared_action"]["tool"] == "find_customer"
+    assert result["prepared_action"]["args"]["customer_name"] == "Example GmbH"
+
+    # Verify that no ERPNext operation was executed.
+    assert result.get("step_results", {}) == {}
 
 
 if __name__ == "__main__":

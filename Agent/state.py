@@ -1,36 +1,24 @@
 
-import operator
-from typing import Annotated, TypedDict, Any
-
-"""
-This is a prelimaniry state only used for testing, not the final AgentState
-"""
-
 """
 Define the preliminary LangGraph state for planning,
-plan validation, and action preparation.
-
-This is not the final AgentState of the ERPNext agent.
+validation and conditional action preparation.
 """
 
 import operator
-
 from typing import Annotated, Any, TypedDict
 
 
 class PlanningState(TypedDict, total=False):
 
-    # Employee instruction and available capabilities
+    # Employee instruction and tool definitions
     instruction: str
     available_tools: list[dict[str, Any]]
 
-    # Planning results
+    # Planning
     goal: str
     proposed_steps: list[dict[str, Any]]
     plan: list[dict[str, Any]]
-    current_step: int
-
-    # Planning limitations
+    current_step: int                   # Very inmportant so tha graph always knows what step it's on 
     missing_info: list[str]
     abort_reason: str
 
@@ -38,13 +26,17 @@ class PlanningState(TypedDict, total=False):
     plan_valid: bool
     validation_errors: list[str]
 
-    # Data obtained during previous execution steps
+    # Business data and execution history
     facts: dict[str, Any]
     artifacts: dict[str, Any]
-    step_results: dict[str, Any]
+    step_results: dict[str, Any]        # Important for conditional routing !! , Tools need to return fields that report the results 
 
-    # Action preparation for action preparer node 
-    prepared_action: dict[str, Any] 
+    # Conditional execution
+    condition_result: str                       # Based on this it is routed to nodes in the LangGraph, after evalutaion 
+    condition_reason: str
+
+    # Action preparation
+    prepared_action: dict[str, Any]
 
     # Workflow status
     status: str
@@ -54,4 +46,3 @@ class PlanningState(TypedDict, total=False):
         list[dict[str, Any]],
         operator.add
     ]
-
