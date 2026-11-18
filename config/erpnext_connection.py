@@ -1,4 +1,7 @@
 
+#Diese datei enthält die Konfiguration für die Verbindung zu ERPNext und die FastAPI-Endpunkte. Diese Endpunkte können über die ERPNext-Integration aufgerufen werden, um Prozesse zu erstellen, abzurufen und zu aktualisieren.
+
+
 import os
 
 from dotenv import load_dotenv
@@ -53,8 +56,12 @@ class ProcessCreate(BaseModel):
     description: str | None = None
 
 
+
+#Aktuell kann man alle Status reinschreiben. Perspektivisch sollte man hier nur gewisse Status haben
 class StatusUpdate(BaseModel):
     status: str
+
+
 
 
 # --------------------------------------------------
@@ -161,42 +168,11 @@ def api_get_process(process_id: str):
             detail="Prozess konnte nicht geladen werden."
         )
 
-
 @app.patch("/processes/{process_id}/status")
-def api_update_status(process_id: str, data: StatusUpdate):
+def update_process_status(process_id: str, data: StatusUpdate):
+    print("PATCH-ENDPOINT ERREICHT")
+    print("Empfangener Status:", data.status)
 
-    allowed_statuses = {
-        "ACTIVE",
-        "COMPLETED",
-        "CANCELLED"
-    }
+    update_status(process_id, data.status)
 
-    if data.status not in allowed_statuses:
-        raise HTTPException(
-            status_code=400,
-            detail="Ungültiger Status."
-        )
-
-    try:
-        if not get_process(process_id):
-            raise HTTPException(
-                status_code=404,
-                detail="Prozess nicht gefunden."
-            )
-
-        update_status(process_id, data.status)
-
-        return {
-            "success": True,
-            "process_id": process_id,
-            "status": data.status
-        }
-
-    except HTTPException:
-        raise
-
-    except Exception:
-        raise HTTPException(
-            status_code=500,
-            detail="Status konnte nicht aktualisiert werden."
-        )
+    return {"success": True, "status": data.status}
