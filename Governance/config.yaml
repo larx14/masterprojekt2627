@@ -1,0 +1,33 @@
+# Konfiguration des Governance-Layers
+
+# Autonomiestufe, falls im State keine gesetzt ist
+default_autonomy_level: L2
+
+sampling:
+  n_initial: 5        # Samples beim ersten Durchlauf (schreibende Schritte)
+  n_max: 10           # Obergrenze beim adaptiven Nachsampeln
+  temperature: 0.7    # Temperatur für den Action-Preparer beim Sampeln
+
+# Mindest-Konfidenz pro Risikoklasse (nur Stufe L2)
+thresholds:
+  read: 0.0
+  draft: 0.6
+  submit: 0.8
+  payment: 1.01       # nie erreichbar -> Zahlungen werden immer eskaliert
+
+# Harte Regeln (gelten auf jeder Stufe, unabhängig von der Konfidenz)
+rules:
+  max_amount: 1000              # EUR, darüber immer eskalieren
+  max_price_deviation: 0.15     # 15 % Abweichung zum letzten Einkaufspreis
+  escalate_new_supplier: true
+
+# Felder, die für den Fingerprint ignoriert werden (Freitext)
+ignore_fields:
+  - description
+  - remarks
+  - reason
+  - title
+  - notes
+
+# Wie viele konkurrierende Varianten der Mensch bei einer Eskalation sieht
+max_options: 3
