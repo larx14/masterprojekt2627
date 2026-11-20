@@ -155,7 +155,7 @@ def test_mismatched_action_is_blocked():
 
 def test_human_approved_execution():
     """
-    Verify execution with an explicit human approval record.
+    Verify execution with the actual Human Review contract.
     """
 
     state = deepcopy(BASE_STATE)
@@ -165,7 +165,7 @@ def test_human_approved_execution():
     state["governance"] = {
         "decision": "escalate",
         "human_action": "approve",
-        "final_action": ACTION,
+        "proposal": deepcopy(ACTION),
     }
 
     tool = MockFindCustomer()
@@ -177,6 +177,10 @@ def test_human_approved_execution():
 
     assert result["status"] == "execution_succeeded"
     assert len(tool.calls) == 1
+
+    assert result["step_results"]["step1"]["status"] == (
+        "completed"
+    )
 
 
 def test_tool_failure_is_recorded():
@@ -272,6 +276,8 @@ def test_successful_negative_lookup():
         registry={"find_customer": tool},
     )
 
+    
+
     assert result["status"] == "execution_succeeded"
 
     record = result["step_results"]["step1"]
@@ -304,3 +310,58 @@ def test_invalid_result_type_is_recorded():
     )
 
     assert len(tool.calls) == 1
+
+def test_human_approval_rejects_modified_action():
+    """
+    Reject execution when the prepared action differs
+    from the human-approved proposal.
+    """
+
+    state = deepcopy(BASE_STATE)
+
+    state["status"] = "approved"
+    state["governance"] = {
+        "decision": "escalate",
+        "human_action": "approve",
+        "proposal": deepcopy(ACTION),
+    }
+
+    state["prepared_action"]["args"]["customer_name"] = (
+        "Different GmbH"
+    )
+
+    tool = MockFindCustomer()
+
+    result = executor(
+        state,
+        registry={"find_customer": tool},
+    )
+
+    assert result["status"] == "execution_blocked"
+    assert tool.calls == []
+
+
+def test_provide_info_does_not_authorize_execution():
+    """
+    Additional information does not authorize
+    an existing prepared action.
+    """
+
+    state = deepcopy(BASE_STATE)
+
+    state["status"] = "info_provided"
+    state["governance"] = {
+        "decision": "needs_human",
+        "human_action": "provide_info",
+        "proposal": deepcopy(ACTION),
+    }
+
+    tool = MockFindCustomer()
+
+    result = executor(
+        state,
+        registry={"find_customer": tool},
+    )
+
+    assert result["status"] == "execution_blocked"
+    assert tool.calls == []
