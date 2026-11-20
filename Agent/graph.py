@@ -12,6 +12,8 @@ from Agent.nodes.plan_validator_node import plan_validator
 from Agent.nodes.condition_evaluator_node import condition_evaluator
 from Agent.nodes.skip_step_node import skip_step
 from Agent.nodes.action_preparer_node import action_preparer
+from Agent.nodes.replanner_node import replanner, route_after_replanner
+from Agent.nodes.finalizer_node import finalizer
 
 
 def route_after_planner(
@@ -26,10 +28,14 @@ def route_after_planner(
 
 def route_after_validation(
     state: PlanningState
-) -> Literal["conditions", "stop"]:
+) -> Literal["conditions", "replan", "stop"]:
 
     if state.get("plan_valid") is True:
         return "conditions"
+
+    # An invalid revised plan is revised again.
+    if (state.get("replan_count") or 0) > 0 and state.get("status") == "plan_invalid":
+        return "replan"
 
     return "stop"
 
@@ -61,6 +67,8 @@ def build_planning_graph(checkpointer=None):
     builder.add_node("condition_evaluator", condition_evaluator)
     builder.add_node("skip_step", skip_step)
     builder.add_node("action_preparer", action_preparer)
+    builder.add_node("replanner", replanner)
+    builder.add_node("finalizer", finalizer)
 
     builder.add_edge(START, "planner")
 
@@ -69,7 +77,7 @@ def build_planning_graph(checkpointer=None):
         route_after_planner,
         {
             "validate": "plan_validator",
-            "stop": END
+            "stop": "finalizer"
         }
     )
 
@@ -78,7 +86,8 @@ def build_planning_graph(checkpointer=None):
         route_after_validation,
         {
             "conditions": "condition_evaluator",
-            "stop": END
+            "replan": "replanner",
+            "stop": "finalizer"
         }
     )
 
@@ -88,15 +97,28 @@ def build_planning_graph(checkpointer=None):
         {
             "prepare": "action_preparer",
             "skip": "skip_step",
-            "stop": END
+            "stop": "finalizer"
         }
     )
 
     # Re-evaluate the next step after skipping.
     builder.add_edge("skip_step", "condition_evaluator")
 
+    # Validate a revised plan again.
+    builder.add_conditional_edges(
+        "replanner",
+        route_after_replanner,
+        {
+            "validate": "plan_validator",
+            "stop": "finalizer"
+        }
+    )
+
     # Stop after preparing one action.
     builder.add_edge("action_preparer", END)
+
+    # Summarize every run before it ends.
+    builder.add_edge("finalizer", END)
 
     return builder.compile(checkpointer=checkpointer)
 

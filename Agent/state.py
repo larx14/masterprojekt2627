@@ -41,6 +41,14 @@ class PlanningState(TypedDict, total=False):
     # Workflow status
     status: str
 
+    # Replanning
+    replan_count: int                   # Number of plan revisions so far (max. 2)
+    replan_reason: str                  # Why the plan must be revised, set by the Evaluator
+
+    # Final summary
+    final_result: dict[str, Any]        # Outcome, step overview and chat message of the Finalizer
+    process_id: str                     # process_list.id, the Finalizer sets the final status
+
     # Decision history
     history: Annotated[
         list[dict[str, Any]],
