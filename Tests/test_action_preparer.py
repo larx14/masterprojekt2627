@@ -49,12 +49,16 @@ class MockStructuredLLM:
     def __init__(self, action):
         self.action = action
 
-    def invoke(self, prompt):
-        return {
-            "parsed": self.action,
-            "parsing_error": None,
-            "raw": None
-        }
+    def batch(self, prompts, return_exceptions=False):
+        return [
+            {
+                "parsed": self.action,
+                "raw": None,
+                "parsing_error": None,
+            }
+            for _ in prompts
+        ]
+
 
 
 class MockLLM:
@@ -64,6 +68,13 @@ class MockLLM:
     def with_structured_output(self, *args, **kwargs):
         return MockStructuredLLM(self.action)
 
+
+def mock_action_preparer(monkeypatch, action):
+    monkeypatch.setattr(
+        action_preparer_node,
+        "get_deepseek",
+        lambda temperature=0: MockLLM(action),
+    )
 
 def make_action(
     args=None,
@@ -82,10 +93,9 @@ def make_action(
 
 
 def test_valid_action(monkeypatch):
-    monkeypatch.setattr(
-        action_preparer_node,
-        "llm",
-        MockLLM(make_action())
+    mock_action_preparer(
+        monkeypatch,
+        make_action()
     )
 
     result = action_preparer_node.action_preparer(
@@ -93,12 +103,14 @@ def test_valid_action(monkeypatch):
     )
 
     assert result["status"] == "action_prepared"
-    assert result["prepared_action"]["tool"] == "find_customer"
-    assert result["prepared_action"]["step_id"] == "step_1"
-    assert result["prepared_action"]["args"] == {
-        "customer_name": "Example GmbH"
-    }
+    assert len(result["candidates"]) >= 1
 
+    candidate = result["candidates"][0]
+
+    assert candidate["valid"] is True
+    assert candidate["tool"] == "find_customer"
+    assert candidate["args"]["customer_name"] == "Example GmbH"
+    assert result["prepared_action"] == {}
 
 def test_plan_must_be_validated():
     state = deepcopy(BASE_STATE)
@@ -111,13 +123,10 @@ def test_plan_must_be_validated():
 
 
 def test_unknown_argument(monkeypatch):
-    monkeypatch.setattr(
-        action_preparer_node,
-        "llm",
-        MockLLM(
-            make_action(
-                args={"unknown_field": "Example GmbH"}
-            )
+    mock_action_preparer(
+        monkeypatch,
+        make_action(
+            args={"unknown_field": "Example GmbH"}
         )
     )
 
@@ -125,19 +134,27 @@ def test_unknown_argument(monkeypatch):
         deepcopy(BASE_STATE)
     )
 
-    assert result["status"] == "action_invalid"
-    assert result["prepared_action"] == {}
+    assert result["status"] == "action_prepared"
+
+    candidate = result["candidates"][0]
+
+    assert candidate["valid"] is False
+    assert candidate["args"] == {
+        "unknown_field": "Example GmbH"
+    }
+
+    assert any(
+        "Unknown argument" in error
+        for error in candidate["errors"]
+    )
 
 
 def test_missing_information(monkeypatch):
-    monkeypatch.setattr(
-        action_preparer_node,
-        "llm",
-        MockLLM(
-            make_action(
-                args={},
-                missing_info=["customer_name"]
-            )
+    mock_action_preparer(
+        monkeypatch,
+        make_action(
+            args={},
+            missing_info=["customer_name"]
         )
     )
 
@@ -145,17 +162,20 @@ def test_missing_information(monkeypatch):
         deepcopy(BASE_STATE)
     )
 
-    assert result["status"] == "needs_human"
-    assert result["prepared_action"] == {}
-    assert "customer_name" in result["missing_info"]
+    assert result["status"] == "action_prepared"
 
+    candidate = result["candidates"][0]
 
+    assert candidate["missing_info"] == ["customer_name"]
+    assert candidate["args"] == {}
+    assert candidate["valid"] is True
+
+    
 def test_wrong_tool(monkeypatch):
-    monkeypatch.setattr(
-        action_preparer_node,
-        "llm",
-        MockLLM(
-            make_action(tool="create_customer")
+    mock_action_preparer(
+        monkeypatch,
+        make_action(
+            tool="create_customer"
         )
     )
 
@@ -163,9 +183,17 @@ def test_wrong_tool(monkeypatch):
         deepcopy(BASE_STATE)
     )
 
-    assert result["status"] == "action_invalid"
-    assert result["prepared_action"] == {}
+    assert result["status"] == "action_prepared"
 
+    candidate = result["candidates"][0]
+
+    assert candidate["valid"] is False
+    assert candidate["tool"] == "create_customer"
+
+    assert any(
+        "Tool mismatch" in error
+        for error in candidate["errors"]
+    )
 
 def test_invalid_current_step():
     state = deepcopy(BASE_STATE)

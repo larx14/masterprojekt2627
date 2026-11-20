@@ -3,8 +3,8 @@
 Execute exactly one authorized ERPNext tool action.
 
 The Executor receives an action selected by Governance.
-It does not use an LLM, modify plans, or evaluate
-business process conditions.
+It does not use an LLM, modify plans, evaluate execution
+conditions or advance the current plan step.
 """
 
 from copy import deepcopy
@@ -19,6 +19,9 @@ def _now() -> str:
 
 
 def _event(event: str, **details: Any) -> dict[str, Any]:
+    """
+    Create an event for the agent's decision history.
+    """
     return {
         "event": event,
         **details,
@@ -44,36 +47,32 @@ def _is_authorized(
     """
     Verify that Governance authorized the exact action.
 
-    Human approval requires an explicit final_action
-    contract from the Human Review node.
+    Automatic authorization requires a matching final_action.
+    Human authorization requires an explicit approved action.
     """
 
     governance = state.get("governance") or {}
     status = state.get("status")
 
-    if status == "auto":
-        if governance.get("decision") != "auto":
-            return False
+    if not isinstance(governance, dict):
+        return False
 
-        approved = governance.get("final_action")
-        return (
-            isinstance(approved, dict)
-            and _identity(approved) == _identity(action)
-        )
+    approved = governance.get("final_action")
+
+    if not isinstance(approved, dict):
+        return False
+
+    if _identity(approved) != _identity(action):
+        return False
+
+    if status == "auto":
+        return governance.get("decision") == "auto"
 
     if status == "approved":
-        if governance.get("human_action") not in (
+        return governance.get("human_action") in (
             "approve",
             "select",
             "edit",
-        ):
-            return False
-
-        approved = governance.get("final_action")
-
-        return (
-            isinstance(approved, dict)
-            and _identity(approved) == _identity(action)
         )
 
     return False
@@ -84,9 +83,10 @@ def _normalize_result(
     specification: dict[str, Any],
 ) -> dict[str, Any]:
     """
-    Validate and normalize business fields returned by a tool.
+    Validate and normalize the tool's business result.
 
-    The prototype supports simple result_fields declarations.
+    The current implementation supports simple result_fields
+    specifications. Missing optional fields are not rejected.
     """
 
     if not isinstance(raw_result, dict):
@@ -112,7 +112,7 @@ def _normalize_result(
             "The tool specification must declare result_fields."
         )
 
-    types = {
+    supported_types = {
         "str": str,
         "bool": bool,
         "int": int,
@@ -123,32 +123,35 @@ def _normalize_result(
 
     normalized = {}
 
-    for name, declared_type in fields.items():
-        if name not in raw_result:
+    for field_name, declared_type in fields.items():
+
+        if field_name not in raw_result:
             continue
 
-        value = raw_result[name]
-        expected_type = types.get(declared_type)
+        expected_type = supported_types.get(declared_type)
 
         if expected_type is None:
             raise ValueError(
                 f"Unsupported result type: {declared_type}"
             )
 
+        value = raw_result[field_name]
+
         if not isinstance(value, expected_type):
             raise TypeError(
-                f"Invalid type for result field '{name}'."
+                f"Invalid type for result field '{field_name}'."
             )
 
+        # Python treats bool as a subclass of int.
         if (
             declared_type in ("int", "float")
             and isinstance(value, bool)
         ):
             raise TypeError(
-                f"Invalid numeric value for field '{name}'."
+                f"Invalid numeric value for field '{field_name}'."
             )
 
-        normalized[name] = deepcopy(value)
+        normalized[field_name] = deepcopy(value)
 
     return normalized
 
@@ -159,49 +162,70 @@ def executor(
     registry: Mapping[str, Any],
 ) -> dict[str, Any]:
     """
-    Invoke one authorized tool and record its result.
+    Execute one authorized tool call and record its outcome.
+
+    The registry maps tool names to objects implementing invoke().
 
     The Evaluator handles business success, plan progress,
-    failure recovery, and selection of the next step.
+    failure recovery and selection of the next step.
     """
 
     plan = state.get("plan") or []
     current = state.get("current_step", 0)
 
     action = state.get("prepared_action") or {}
-    results = deepcopy(state.get("step_results") or {})
+    step_results = deepcopy(
+        state.get("step_results") or {}
+    )
 
     def blocked(reason: str) -> dict[str, Any]:
+        """
+        Block execution before invoking a tool.
+        """
         return {
             "status": "execution_blocked",
             "execution_error": reason,
             "history": [
-                _event("execution_blocked", reason=reason)
+                _event(
+                    "execution_blocked",
+                    reason=reason,
+                )
             ],
         }
 
+    # Verify that the plan has been validated.
     if state.get("plan_valid") is not True:
-        return blocked("The plan has not been validated.")
+        return blocked(
+            "The plan has not been validated."
+        )
 
+    # Verify the current step index.
     if (
         not isinstance(current, int)
         or isinstance(current, bool)
         or not 0 <= current < len(plan)
     ):
-        return blocked("Invalid current step index.")
+        return blocked(
+            "Invalid current step index."
+        )
 
     step = plan[current]
     step_id = step.get("id")
     tool_name = step.get("tool")
 
+    # Only pending steps may be executed.
     if step.get("status", "pending") != "pending":
-        return blocked("The current step is not pending.")
+        return blocked(
+            "The current step is not pending."
+        )
 
-    if step_id in results:
+    # Prevent executing an already recorded step.
+    if step_id in step_results:
         return blocked(
             f"Step '{step_id}' already has an execution record."
         )
 
+    # Check that the prepared action matches the plan.
     if (
         not isinstance(action, dict)
         or action.get("step_id") != step_id
@@ -212,11 +236,13 @@ def executor(
             "The prepared action does not match the current step."
         )
 
+    # Require authorization from Governance or Human Review.
     if not _is_authorized(state, action):
         return blocked(
             "Governance has not authorized this exact action."
         )
 
+    # Resolve the declared tool specification.
     specification = next(
         (
             item
@@ -234,6 +260,7 @@ def executor(
             f"Tool '{tool_name}' is not in the tool catalog."
         )
 
+    # Resolve the actual executable tool.
     tool = registry.get(tool_name)
 
     if tool is None:
@@ -246,22 +273,25 @@ def executor(
             f"Tool '{tool_name}' does not support invoke()."
         )
 
+    # Execute exactly one tool invocation.
     try:
-        raw_result = tool.invoke(deepcopy(action["args"]))
+        raw_result = tool.invoke(
+            deepcopy(action["args"])
+        )
 
-        normalized = _normalize_result(
+        normalized_result = _normalize_result(
             raw_result,
             specification,
         )
 
-        results[step_id] = {
+        step_results[step_id] = {
             "status": "completed",
-            "result": normalized,
+            "result": normalized_result,
             "reason": "Tool invocation succeeded.",
         }
 
         return {
-            "step_results": results,
+            "step_results": step_results,
             "prepared_action": {},
             "candidates": [],
             "n_requested": 0,
@@ -280,14 +310,14 @@ def executor(
     except Exception as exc:
         error = f"{type(exc).__name__}: {exc}"
 
-        results[step_id] = {
+        step_results[step_id] = {
             "status": "failed",
             "result": None,
             "reason": error,
         }
 
         return {
-            "step_results": results,
+            "step_results": step_results,
             "prepared_action": {},
             "candidates": [],
             "n_requested": 0,

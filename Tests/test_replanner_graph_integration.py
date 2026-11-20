@@ -33,6 +33,30 @@ from Agent.nodes.finalizer_node import finalizer
 from Tests.mock_tools import MOCK_TOOLS
 
 
+
+class MockPreparerStructuredLLM:
+    def __init__(self, action):
+        self.action = action
+
+    def batch(self, prompts, return_exceptions=False):
+        return [
+            {
+                "parsed": self.action,
+                "raw": None,
+                "parsing_error": None,
+            }
+            for _ in prompts
+        ]
+
+
+class MockPreparerLLM:
+    def __init__(self, action):
+        self.action = action
+
+    def with_structured_output(self, *args, **kwargs):
+        return MockPreparerStructuredLLM(self.action)
+
+
 class MockStructuredLLM:
     def __init__(self, response):
         self.response = response
@@ -226,9 +250,9 @@ def test_replanner_to_action_preparer(monkeypatch):
 
     monkeypatch.setattr(
         action_preparer_node,
-        "llm",
-        MockLLM(prepared),
-    )
+        "get_deepseek",
+        lambda temperature=0: MockPreparerLLM(prepared),
+)
 
     graph = build_integration_graph()
     result = graph.invoke(deepcopy(BASE_STATE))
@@ -248,13 +272,37 @@ def test_replanner_to_action_preparer(monkeypatch):
         "r1_find_croissant",
     ]
 
-    assert result["prepared_action"]["step_id"] == (
-        "r1_find_croissant"
-    )
-    assert result["prepared_action"]["tool"] == "find_item"
-    assert result["prepared_action"]["args"] == {
+     # Verify that the Action Preparer generated candidates.
+    candidates = result["candidates"]
+
+    assert len(candidates) >= 1
+
+    valid_candidates = [
+        candidate
+        for candidate in candidates
+        if candidate["valid"]
+    ]
+
+    assert len(valid_candidates) >= 1
+
+    candidate = valid_candidates[0]
+
+    assert candidate["tool"] == "find_item"
+    assert candidate["args"] == {
         "search": "Croissant"
     }
+    assert candidate["missing_info"] == []
+    assert candidate["confidence"] == 0.95
+
+    # Governance has not selected an action yet.
+    assert result["prepared_action"] == {}
+
+    # The Replanner preserved the completed step and
+    # positioned the cursor at the new lookup step.
+    assert result["current_step"] == 1
+    assert result["plan"][result["current_step"]]["id"] == (
+        "r1_find_croissant"
+    )
 
     events = [
         entry["event"] for entry in result["history"]
@@ -263,7 +311,7 @@ def test_replanner_to_action_preparer(monkeypatch):
     assert "plan_replanned" in events
     assert "plan_validated" in events
     assert "condition_evaluated" in events
-    assert "action_prepared" in events
+    assert "candidates_prepared" in events
 
     assert "process_finalized" not in events
 

@@ -37,10 +37,11 @@ def test_complete_planning_pipeline():
         indent=2
     ))
 
-    print("\nPREPARED ACTION:")
+    print("\nPREPARED CANDIDATES:")
     print(json.dumps(
-        result.get("prepared_action", {}),
-        indent=2
+        result.get("candidates", []),
+        indent=2,
+        ensure_ascii=False
     ))
 
     print("\nDECISION EVENTS:")
@@ -58,11 +59,27 @@ def test_complete_planning_pipeline():
     assert result["status"] == "action_prepared"
     assert result["plan_valid"] is True
 
-    action = result["prepared_action"]
+    candidates = result["candidates"]
 
-    assert action["step_id"] == result["plan"][0]["id"]
-    assert action["tool"] == result["plan"][0]["tool"]
+        
+    assert len(candidates) > 0
 
+    valid_candidates = [
+            candidate
+            for candidate in candidates
+            if candidate["valid"]
+        ]
+
+    assert len(valid_candidates) > 0
+
+    candidate = valid_candidates[0]
+
+    assert candidate["tool"] == result["plan"][0]["tool"]
+    assert candidate["tool"] == "find_customer"
+    assert candidate["args"]["customer_name"] == "Example GmbH"
+
+    assert result["prepared_action"] == {}
+   
     events = [
         entry["event"]
         for entry in result["history"]
@@ -70,7 +87,7 @@ def test_complete_planning_pipeline():
 
     assert "plan_created" in events
     assert "plan_validated" in events
-    assert "action_prepared" in events
+    assert "candidates_prepared" in events
 
 
 if __name__ == "__main__":
