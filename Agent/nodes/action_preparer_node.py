@@ -3,7 +3,9 @@
 Implement the generic Action Preparer Node.
 
 The node prepares arguments for exactly one plan step.
-It does not execute tools or evaluate execution conditions.
+The Action Preparer generates one or more LLM candidates.
+It does not select an action, execute tools, or approve
+ERPNext operations.
 """
 
 import json
