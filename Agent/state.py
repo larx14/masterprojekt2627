@@ -6,9 +6,9 @@ validation and conditional action preparation.
 
 import operator
 from typing import Annotated, Any, TypedDict
+from Governance.state_fields import GovernanceFields
 
-
-class PlanningState(TypedDict, total=False):
+class PlanningState(GovernanceFields, total=False):
 
     # Employee instruction and tool definitions
     instruction: str
@@ -40,6 +40,19 @@ class PlanningState(TypedDict, total=False):
 
     # Workflow status
     status: str
+
+    # Replanning
+    replan_count: int                   # Number of plan revisions so far (max. 2)
+    replan_reason: str                  # Why the plan must be revised, set by the Evaluator
+
+    # Execution
+    execution_error: str
+
+   
+
+    # Final summary
+    final_result: dict[str, Any]        # Outcome, step overview and chat message of the Finalizer
+    process_id: str                     # process_list.id, the Finalizer sets the final status
 
     # Decision history
     history: Annotated[

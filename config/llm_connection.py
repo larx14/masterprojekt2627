@@ -13,3 +13,9 @@ def get_deepseek():
         temperature=0
     )
 
+def get_deepseek(temperature: float = 0):
+    return ChatDeepSeek(
+        model="deepseek-chat",
+        api_key=DEEPSEEK_API_KEY,
+        temperature=temperature,
+    )

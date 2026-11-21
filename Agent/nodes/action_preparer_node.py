@@ -3,7 +3,9 @@
 Implement the generic Action Preparer Node.
 
 The node prepares arguments for exactly one plan step.
-It does not execute tools or evaluate execution conditions.
+The Action Preparer generates one or more LLM candidates.
+It does not select an action, execute tools, or approve
+ERPNext operations.
 """
 
 import json
@@ -16,8 +18,11 @@ from Agent.models import PreparedAction
 from Agent.state import PlanningState
 from config.llm_connection import get_deepseek
 
+from Governance.config import get_config
+from Governance.risk import initial_samples
 
-llm = get_deepseek()
+
+# llm = get_deepseek()
 
 
 ACTION_PREPARER_PROMPT = """
@@ -97,6 +102,23 @@ JSON SCHEMA:
 {schema}
 """
 
+# Helper function for logging
+def make_event(event: str, **details: Any) -> dict[str, Any]:
+    return {
+        "event": event,
+        **details,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+# Formatting python to JSON for LLM 
+def _dump(value: Any) -> str:
+    return json.dumps(
+        value,
+        ensure_ascii=False,
+        indent=2,
+        default=str,
+    )
+
 
 def validate_arguments(
     args: dict[str, Any],
@@ -157,91 +179,172 @@ def validate_arguments(
 
     return errors
 
-
-def action_preparer(state: PlanningState) -> dict:
+def invalid_candidate(
+    tool_name: str,
+    error: str,
+) -> dict[str, Any]:
     """
-    Prepare a single tool invocation from the current
-    validated plan step and available context.
+    Return an invalid candidate without failing
+    the entire sampling batch.
     """
 
-    def make_event(event: str, **details) -> dict:
-        """
-        Create a timestamped decision log entry.
-        """
+    return {
+        "tool": tool_name,
+        "args": {},
+        "missing_info": [],
+        "valid": False,
+        "errors": [error],
+        "reason": "",
+        "confidence": None,
+    }
 
-        return {
-            "event": event,
-            **details,
-            "timestamp": datetime.now(
-                timezone.utc
-            ).isoformat()
-        }
 
-    def reject(reason: str, status: str = "action_invalid") -> dict:
-        """
-        Return a failed preparation result without
-        forwarding an executable action.
-        """
+def to_candidate(
+    response: Any,
+    tool_name: str,
+    parameters: dict[str, str],
+) -> dict[str, Any]:
+    """
+    Convert one structured LLM response into a
+    candidate compatible with the Governance Gate.
+    """
 
+    if not isinstance(response, dict):
+        return invalid_candidate(
+            tool_name,
+            f"Invalid LLM response type: {type(response).__name__}",
+        )
+
+    action = response.get("parsed")
+
+    if action is None:
+        return invalid_candidate(
+            tool_name,
+            str(response.get("parsing_error") or "Parsing failed."),
+        )
+
+    errors = []
+
+    if action.tool != tool_name:
+        errors.append(
+            f"Tool mismatch: expected '{tool_name}', "
+            f"received '{action.tool}'."
+        )
+
+    if not action.missing_info:
+        errors.extend(
+            validate_arguments(action.args, parameters)
+        )
+
+    return {
+        "tool": action.tool,
+        "args": action.args,
+        "missing_info": action.missing_info,
+        "valid": not errors,
+        "errors": errors,
+        "reason": action.reason,
+        "confidence": action.confidence,
+    }
+
+
+def action_preparer(state: PlanningState) -> dict[str, Any]:
+    """
+    Generate action candidates for the current plan step.
+
+    Governance may request additional samples by setting
+    n_requested to a positive integer.
+    """
+
+    def fail(reason: str) -> dict[str, Any]:
         return {
             "prepared_action": {},
-            "status": status,
+            "status": "action_invalid",
             "history": [
                 make_event(
                     "action_preparation_failed",
                     reason=reason,
-                    status=status
                 )
-            ]
+            ],
         }
 
-    # Require a plan approved by the Plan Validator.
     if state.get("plan_valid") is not True:
-        return reject(
-            "The execution plan has not been validated."
-        )
+        return fail("The plan has not been validated.")
 
-    plan = state.get("plan", [])
-    current_step = state.get("current_step", 0)
+    plan = state.get("plan") or []
+    current = state.get("current_step", 0)
 
-    if not isinstance(current_step, int) or isinstance(current_step, bool):
-        return reject("The current step index is invalid.")
+    if (
+        not isinstance(current, int)
+        or isinstance(current, bool)
+        or not 0 <= current < len(plan)
+    ):
+        return fail("Invalid current step index.")
 
-    if not isinstance(plan, list) or not 0 <= current_step < len(plan):
-        return reject("No valid current plan step is available.")
+    step = plan[current]
 
-    step = plan[current_step]
+    if step.get("status", "pending") != "pending":
+        return fail("The current step is not pending.")
+
     tool_name = step.get("tool")
 
-    # Locate the tool specification for the current step.
-    matching_tools = [
-        tool
-        for tool in state.get("available_tools", [])
-        if isinstance(tool, dict)
-        and tool.get("name") == tool_name
-    ]
+    selected_tool = next(
+        (
+            tool
+            for tool in state.get("available_tools", [])
+            if (
+                isinstance(tool, dict)
+                and tool.get("name") == tool_name
+            )
+        ),
+        None,
+    )
 
-    if len(matching_tools) != 1:
-        return reject(
-            f"Exactly one specification is required "
-            f"for tool '{tool_name}'."
+    if selected_tool is None:
+        return fail(
+            f"Tool '{tool_name}' is not available."
         )
 
-    selected_tool = matching_tools[0]
     parameters = selected_tool.get("parameters")
 
-    if not isinstance(parameters, dict):
-        return reject(
-            f"Tool '{tool_name}' has no valid parameter specification."
+    if (
+        not isinstance(parameters, dict)
+        or not all(
+            isinstance(name, str)
+            and isinstance(type_name, str)
+            for name, type_name in parameters.items()
         )
-
-    # Validate the mock tool specification.
-    if not all(
-        isinstance(name, str)
-        and isinstance(type_name, str)
-        for name, type_name in parameters.items()
     ):
-        return reject("Invalid parameter specification.")
+        return fail("Invalid tool parameter specification.")
+
+    cfg = get_config()
+    sampling = cfg["sampling"]
+
+    existing = list(state.get("candidates") or [])
+    requested = state.get("n_requested") or 0
+
+    if requested:
+        n = requested
+    elif existing:
+        return fail(
+            "Existing candidates require an explicit "
+            "sampling request."
+        )
+    else:
+        n = initial_samples(selected_tool, cfg)
+
+    max_samples = int(sampling["n_max"])
+
+    if (
+        not isinstance(n, int)
+        or isinstance(n, bool)
+        or n < 1
+        or len(existing) + n > max_samples
+    ):
+        return fail("Invalid candidate sampling request.")
+
+    temperature = (
+        sampling["temperature"] if n > 1 else 0
+    )
 
     parser = PydanticOutputParser(
         pydantic_object=PreparedAction
@@ -250,109 +353,66 @@ def action_preparer(state: PlanningState) -> dict:
     prompt = ACTION_PREPARER_PROMPT.format(
         instruction=state.get("instruction", ""),
         goal=state.get("goal", ""),
-        step=json.dumps(
-            step, ensure_ascii=False, indent=2
+        step=_dump(step),
+        tool=_dump(selected_tool),
+        facts=_dump(state.get("facts") or {}),
+        artifacts=_dump(state.get("artifacts") or {}),
+        step_results=_dump(
+            state.get("step_results") or {}
         ),
-        tool=json.dumps(
-            selected_tool, ensure_ascii=False, indent=2
-        ),
-        facts=json.dumps(
-            state.get("facts", {}), ensure_ascii=False
-        ),
-        artifacts=json.dumps(
-            state.get("artifacts", {}), ensure_ascii=False
-        ),
-        step_results=json.dumps(
-            state.get("step_results", {}), ensure_ascii=False
-        ),
-        schema=parser.get_format_instructions()
+        schema=parser.get_format_instructions(),
     )
 
-    # Ask the LLM to prepare arguments without tool execution.
     try:
-        structured_llm = llm.with_structured_output(
+        structured_llm = get_deepseek(
+            temperature=temperature
+        ).with_structured_output(
             PreparedAction,
             method="json_mode",
-            include_raw=True
+            include_raw=True,
         )
 
-        response = structured_llm.invoke(prompt)
-        action = response.get("parsed")
-
-        if action is None:
-            return reject(
-                "The LLM returned an invalid structured action: "
-                f"{response.get('parsing_error')}"
-            )
+        responses = structured_llm.batch(
+            [prompt] * n,
+            return_exceptions=True,
+        )
 
     except Exception as exc:
-        return reject(
-            "The LLM request failed: "
-            f"{type(exc).__name__}: {exc}"
-        )
+        responses = [exc] * n
 
-    # The model must not switch to another tool.
-    if action.tool != tool_name:
-        return reject(
-            f"Prepared tool '{action.tool}' does not "
-            f"match planned tool '{tool_name}'."
-        )
+    new_candidates = []
 
-    # Missing information must not be replaced by guesses.
-    if action.missing_info:
-        return {
-            "prepared_action": {},
-            "missing_info": action.missing_info,
-            "status": "needs_human",
-            "history": [
-                make_event(
-                    "action_missing_information",
-                    step_id=step["id"],
-                    tool=tool_name,
-                    missing_info=action.missing_info,
-                    reason=action.reason
-                )
-            ]
-        }
+    for response in responses:
+        if isinstance(response, dict):
+            candidate = to_candidate(
+                response,
+                tool_name,
+                parameters,
+            )
+        else:
+            candidate = invalid_candidate(
+                tool_name,
+                f"{type(response).__name__}: {response}",
+            )
 
-    # Validate the prepared arguments against the mock schema.
-    errors = validate_arguments(
-        action.args,
-        parameters
-    )
+        new_candidates.append(candidate)
 
-    if errors:
-        return {
-            "prepared_action": {},
-            "status": "action_invalid",
-            "history": [
-                make_event(
-                    "action_validation_failed",
-                    step_id=step["id"],
-                    tool=tool_name,
-                    errors=errors,
-                    proposed_args=action.args
-                )
-            ]
-        }
-
-    prepared_action = {
-        "step_id": step["id"],
-        "tool": tool_name,
-        "args": action.args,
-        "reason": action.reason,
-        "confidence": action.confidence
-    }
-
-    # Return a proposed action for downstream validation.
     return {
-        "prepared_action": prepared_action,
-        "missing_info": [],
+        "candidates": existing + new_candidates,
+        "n_requested": 0,
+        "prepared_action": {},
         "status": "action_prepared",
         "history": [
             make_event(
-                "action_prepared",
-                **prepared_action
+                "candidates_prepared",
+                step_id=step["id"],
+                n=len(new_candidates),
+                total_candidates=len(existing) + len(new_candidates),
+                valid_candidates=sum(
+                    1 for candidate in new_candidates
+                    if candidate["valid"]
+                ),
             )
-        ]
+        ],
     }
+
