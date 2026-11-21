@@ -1,6 +1,8 @@
 
 #Diese datei enthält die Konfiguration für die Verbindung zu ERPNext und die FastAPI-Endpunkte. Diese Endpunkte können über die ERPNext-Integration aufgerufen werden, um Prozesse zu erstellen, abzurufen und zu aktualisieren.
 
+#python -m uvicorn config.erpnext_connection:app --host 127.0.0.1 --port 8000#
+
 
 import os
 

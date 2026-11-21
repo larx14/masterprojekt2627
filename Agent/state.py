@@ -44,5 +44,9 @@ class PlanningState(TypedDict, total=False):
     # Decision history
     history: Annotated[
         list[dict[str, Any]],
-        operator.add
-    ]
+        operator.add]
+
+    # Expected state and verification result for "evaluator.node". So it can compare "IST vs SOLL" and report differences.
+    expected_state: dict[str, Any]
+    verification_result: dict[str, Any]
+    
