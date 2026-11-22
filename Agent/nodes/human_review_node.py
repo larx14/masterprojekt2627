@@ -72,6 +72,8 @@ def human_review(state: dict[str, Any]) -> dict:
         "risk": g.get("risk"),
         "autonomy_level": g.get("autonomy_level"),
         "rule_hits": g.get("rule_hits", []),
+        "rule_details": g.get("rule_details", []),
+        "step_description": g.get("step_description"),
         "proposal": proposal,
         "options": g.get("options", []),
         "missing_info": state.get("missing_info", []),
@@ -121,7 +123,8 @@ def human_review(state: dict[str, Any]) -> dict:
     update = {
         "prepared_action": action or {},
         "governance": {**g, "human_action": kind, "corrected": corrected,
-                       "human_comment": answer.get("comment")},
+                       "human_comment": answer.get("comment"),
+                       "final_action": action},
         "status": status,
         "history": [{
             "event": "human_review",

@@ -18,7 +18,7 @@ from Governance.config import get_config
 from Governance.fingerprint import INVALID, MISSING
 from Governance.policy import decide
 from Governance.risk import classify_risk
-from Governance.rules import check_rules
+from Governance.rules import check_rules, describe_hits
 
 
 def _now() -> str:
@@ -78,6 +78,7 @@ def governance_gate(
 
     risk = classify_risk(tool_spec, representative.get("args", {}))
     rule_hits = check_rules(representative, risk, state.get("facts", {}), cfg.get("rules", {}))
+    rule_details = describe_hits(rule_hits, representative, state.get("facts", {}), cfg.get("rules", {}))
     level = state.get("autonomy_level") or cfg["default_autonomy_level"]
 
     decision, reason, threshold = decide(scored, risk, rule_hits, level, cfg)
@@ -147,6 +148,8 @@ def governance_gate(
             "log_error": log_error,
             "proposal": chosen,
             "options": options,
+            "step_description": step.get("description"),
+            "rule_details": rule_details,
         },
         "missing_info": missing,
         "n_requested": 0,

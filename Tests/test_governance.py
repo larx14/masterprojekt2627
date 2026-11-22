@@ -257,3 +257,79 @@ def test_escalation_question_lists_executable_options():
 def test_escalation_question_missing_info():
     text = format_escalation({"type": "needs_human", "missing_info": ["supplier"], "proposal": ACTION})
     assert "supplier" in text and "fehlen" in text
+    assert "„supplier: <Wert>“" in text
+
+
+# ---------------------------------------------------------------- chat details
+
+from Governance.rules import describe_hits, format_eur  # noqa: E402
+
+
+def test_format_eur_german():
+    assert format_eur(1200) == "1.200,00 €"
+    assert format_eur(0.8) == "0,80 €"
+
+
+def test_describe_hits_contains_values():
+    rules = CFG["rules"]
+    facts = {"known_suppliers": ["Mühle Schmidt"], "last_prices": {"MEHL-550": 0.80}}
+
+    (amount,) = describe_hits(["amount_over_limit"], cand(qty=1500), facts, rules)
+    assert "1.200,00 €" in amount and "1.000,00 €" in amount
+
+    (price,) = describe_hits(["price_deviation"], cand(rate=0.95), facts, rules)
+    assert "0,95 €" in price and "0,80 €" in price and "+19%" in price
+
+    (supplier,) = describe_hits(["new_supplier"], cand(supplier="Neu GmbH"), facts, rules)
+    assert "Neu GmbH" in supplier
+
+
+def test_price_rule_unchanged_after_refactor():
+    facts = {"last_prices": {"MEHL-550": 0.80}}
+    assert check_rules(cand(rate=0.95), "draft", facts, CFG["rules"]) == ["price_deviation"]
+    assert check_rules(cand(rate=0.90), "draft", facts, CFG["rules"]) == []
+
+
+def test_escalation_shows_context_rule_details_and_total():
+    payload = {"type": "escalate", "risk": "draft", "autonomy_level": "L2",
+               "step_description": "Mehl nachbestellen",
+               "rule_hits": ["amount_over_limit"],
+               "rule_details": ["Betrag 1.200,00 € liegt über dem Limit von 1.000,00 €."],
+               "options": [{"votes": "5/5", "executable": True,
+                            "action": {**ACTION, "args": {**ACTION["args"],
+                                       "items": [{"item_code": "MEHL-550", "qty": 1500, "rate": 0.8}]}}}]}
+    text = format_escalation(payload)
+    assert text.startswith("Schritt: Mehl nachbestellen")
+    assert "1.200,00 € liegt über dem Limit" in text
+    assert "Summe 1.200,00 €" in text and "0,80 €" in text
+
+
+def test_escalation_options_show_only_difference():
+    other = {**ACTION, "args": {**ACTION["args"], "supplier": "Bio-Mühle"}}
+    payload = {"type": "escalate", "risk": "submit", "autonomy_level": "L2", "rule_hits": [],
+               "options": [{"votes": "6/10", "action": ACTION, "executable": True},
+                           {"votes": "4/10", "action": other, "executable": True}]}
+    lines = format_escalation(payload).splitlines()
+    assert any(l.startswith("Gemeinsam:") and "50 × MEHL-550" in l and "Summe 40,00 €" in l
+               for l in lines)
+    assert "Option 1: Lieferant Mühle Schmidt (6/10 Stimmen)" in lines
+    assert "Option 2: Lieferant Bio-Mühle (4/10 Stimmen)" in lines
+
+
+def test_escalation_payment_and_tie_reasons():
+    base = {"type": "escalate", "autonomy_level": "L2", "rule_hits": []}
+    pay = format_escalation({**base, "risk": "payment",
+                             "options": [{"votes": "5/5", "action": ACTION, "executable": True}]})
+    assert "Zahlungen brauchen immer eine Freigabe" in pay
+
+    other = {**ACTION, "args": {**ACTION["args"], "supplier": "Bio-Mühle"}}
+    tie = format_escalation({**base, "risk": "draft",
+                             "options": [{"votes": "5/10", "action": ACTION, "executable": True},
+                                         {"votes": "5/10", "action": other, "executable": True}]})
+    assert "gleichauf" in tie
+
+
+def test_chat_after_select_shows_executed_variant():
+    other = {**ACTION, "args": {**ACTION["args"], "supplier": "Bio-Mühle"}}
+    text = format_for_chat(gov(decision="escalate", human_action="select", final_action=other))
+    assert "Bio-Mühle" in text and "Mühle Schmidt" not in text

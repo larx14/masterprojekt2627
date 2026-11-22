@@ -128,6 +128,8 @@ def test_disagreement_samples_more_then_escalates_and_human_selects(log):
     payload = channel.payloads[0]
     assert payload["confidence"] == 0.6
     assert [o["votes"] for o in payload["options"]] == ["6/10", "4/10"]
+    assert payload["step_description"] == "PO anlegen"
+    assert result["governance"]["final_action"]["args"]["supplier"] == "Bio-Mühle"
 
     (record,) = log.records.values()
     assert record["n_samples"] == 10
@@ -175,6 +177,7 @@ def test_hard_rule_escalates_even_on_l3(log):
 
     assert result["status"] == "executed"
     assert channel.payloads[0]["rule_hits"] == ["new_supplier"]
+    assert "Neu GmbH" in channel.payloads[0]["rule_details"][0]
     (record,) = log.records.values()
     assert record["human_action"] == "approve"
     assert record["corrected"] is False

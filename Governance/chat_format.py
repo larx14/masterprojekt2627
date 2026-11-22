@@ -11,6 +11,8 @@ it is a count of agreeing samples, not a probability.
 import json
 from typing import Any
 
+from Governance.rules import action_amount, format_eur
+
 
 RISK_LABELS = {
     "read": "Lesen",
@@ -44,8 +46,21 @@ def votes(g: dict[str, Any]) -> str | None:
     return f"{distribution[0]['count']}/{n}"
 
 
-def summarize_action(action: dict[str, Any] | None) -> str:
-    """Short business summary of a prepared action."""
+def _num(value: Any) -> str:
+    """50 -> '50', 2.5 -> '2,5'."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return str(value)
+    if float(value).is_integer():
+        return str(int(value))
+    return f"{value:g}".replace(".", ",")
+
+
+def summarize_action(
+    action: dict[str, Any] | None,
+    with_tool: bool = True,
+    with_total: bool = True,
+) -> str:
+    """Short business summary of a prepared action, incl. total amount."""
 
     if not action:
         return "keine Aktion"
@@ -67,18 +82,56 @@ def summarize_action(action: dict[str, Any] | None) -> str:
         for item in items[:3]:
             if not isinstance(item, dict):
                 continue
-            line = f"{item.get('qty', '?')} × {item.get('item_code', '?')}"
-            if item.get("rate") is not None:
-                line += f" à {item['rate']} €"
+            line = f"{_num(item.get('qty', '?'))} × {item.get('item_code', '?')}"
+            if isinstance(item.get("rate"), (int, float)):
+                line += f" à {format_eur(item['rate'])}"
             parts.append(line)
         if len(items) > 3:
             parts.append(f"+{len(items) - 3} weitere Positionen")
 
-    if not parts:
+    if not parts and args:
         compact = json.dumps(args, ensure_ascii=False, default=str)
         parts.append(compact if len(compact) <= 120 else compact[:117] + "...")
 
-    return f"{action.get('tool', '?')}: " + ", ".join(parts)
+    if with_total:
+        total = action_amount(action)
+        if total is not None:
+            parts.append(f"Summe {format_eur(total)}")
+
+    text = ", ".join(parts)
+
+    if with_tool:
+        return f"{action.get('tool', '?')}: {text}" if text else str(action.get("tool", "?"))
+
+    return text
+
+
+def _diff_keys(actions: list[dict[str, Any]]) -> list[str]:
+    """Argument names whose values differ between the actions ('tool' if the tool differs)."""
+
+    def dump(value):
+        return json.dumps(value, sort_keys=True, ensure_ascii=False, default=str)
+
+    keys = []
+    if len({str(a.get("tool")) for a in actions}) > 1:
+        keys.append("tool")
+
+    names = []
+    for a in actions:
+        for key in (a.get("args") or {}):
+            if key not in names:
+                names.append(key)
+
+    for key in names:
+        if len({dump((a.get("args") or {}).get(key)) for a in actions}) > 1:
+            keys.append(key)
+
+    return keys
+
+
+def _subset(action: dict[str, Any], keys: list[str]) -> dict[str, Any]:
+    args = action.get("args") or {}
+    return {"tool": action.get("tool"), "args": {k: args[k] for k in keys if k in args}}
 
 
 def _confidence_line(g: dict[str, Any]) -> str:
@@ -88,7 +141,12 @@ def _confidence_line(g: dict[str, Any]) -> str:
 
 
 def _escalation_reason(g: dict[str, Any]) -> str:
+    """Reason for an escalation, from the governance record (after the decision)."""
+
     rule_hits = g.get("rule_hits") or []
+
+    if g.get("rule_details"):
+        return "Freigabe nötig: " + " ".join(g["rule_details"]).rstrip(".")
 
     if rule_hits:
         return "Regel greift: " + ", ".join(RULE_LABELS.get(r, r) for r in rule_hits)
@@ -96,14 +154,18 @@ def _escalation_reason(g: dict[str, Any]) -> str:
     if g.get("decision") == "needs_human":
         return "Mir fehlen Informationen"
 
-    if (g.get("distribution") or [{}])[0].get("key") == "INVALID":
+    distribution = g.get("distribution") or []
+
+    if distribution and distribution[0].get("key") == "INVALID":
         return "Ich konnte keine gültige Aktion vorbereiten"
 
     level = g.get("autonomy_level")
 
+    if level == "L2" and g.get("risk") == "payment":
+        return "Zahlungen brauchen immer eine Freigabe"
+
     if level == "L2" and g.get("threshold") is not None and g.get("conf_consistency") is not None:
-        if len(g.get("distribution") or []) > 1 and \
-                g["distribution"][0]["count"] == g["distribution"][1]["count"]:
+        if len(distribution) > 1 and distribution[0]["count"] == distribution[1]["count"]:
             return "Zwei Varianten liegen gleichauf"
         return (f"Ich bin mir nicht sicher genug "
                 f"({votes(g)}, nötig sind {g['threshold']:.0%} Übereinstimmung)")
@@ -111,41 +173,88 @@ def _escalation_reason(g: dict[str, Any]) -> str:
     return LEVEL_LABELS.get(level) or "Freigabe nötig"
 
 
+def _sentence(text: str) -> str:
+    return text if text.endswith((".", "!", "?")) else text + "."
+
+
 def format_escalation(payload: dict[str, Any]) -> str:
     """Question for the human, built from the interrupt payload."""
 
     lines = []
 
+    if payload.get("step_description"):
+        lines.append(f"Schritt: {payload['step_description']}")
+
+    # Missing information: ask a concrete question.
     if payload.get("type") == "needs_human":
         missing = payload.get("missing_info") or []
-        lines.append("Mir fehlen Informationen: " + (", ".join(missing) or "unbekannt") + ".")
-        lines.append(f"Vorschlag bisher: {summarize_action(payload.get('proposal'))}")
-        lines.append("Bitte ergänze die Angaben oder brich ab.")
+        lines.append("Mir fehlen Angaben für diesen Schritt: " + (", ".join(missing) or "unbekannt") + ".")
+        lines.append(f"Bisheriger Vorschlag: {summarize_action(payload.get('proposal'))}")
+        example = missing[0] if missing else "Feld"
+        lines.append(f"Bitte antworte mit den fehlenden Angaben, z. B. „{example}: <Wert>“, "
+                     f"oder mit „abbrechen“.")
         return "\n".join(lines)
 
     options = [o for o in payload.get("options", []) if o.get("executable", True)]
-    top_votes = (payload.get("options") or [{}])[0].get("votes")
     risk = RISK_LABELS.get(payload.get("risk"), payload.get("risk") or "?")
+    top_votes = (payload.get("options") or [{}])[0].get("votes")
 
-    if payload.get("rule_hits"):
+    # Why a human has to decide.
+    if payload.get("rule_details"):
+        reason = "Freigabe nötig: " + " ".join(payload["rule_details"])
+    elif payload.get("rule_hits"):
         reason = "Regel greift: " + ", ".join(RULE_LABELS.get(r, r) for r in payload["rule_hits"])
     elif payload.get("autonomy_level") == "L1":
         reason = "Auf Stufe L1 braucht jede Änderung eine Freigabe"
     elif not options:
         reason = "Ich konnte keine gültige Aktion vorbereiten"
+    elif len(options) > 1 and options[0].get("votes") == options[1].get("votes"):
+        reason = f"Zwei Varianten liegen gleichauf ({options[0]['votes']} zu {options[1]['votes']} Stimmen)"
+    elif payload.get("risk") == "payment":
+        reason = "Zahlungen brauchen immer eine Freigabe"
     else:
         reason = f"Ich bin mir nicht sicher genug ({top_votes} Stimmen für die beste Variante)"
 
-    lines.append(f"Ich brauche deine Entscheidung. {reason}. Risiko: {risk}.")
+    lines.append(f"Ich brauche deine Entscheidung. {_sentence(reason)} Risiko: {risk}.")
 
-    for number, option in enumerate(options, start=1):
-        lines.append(f"Option {number}: {summarize_action(option['action'])} "
-                     f"({option['votes']} Stimmen)")
+    # Options: common part once, then only the differences.
+    if len(options) == 1:
+        o = options[0]
+        lines.append(f"Vorschlag: {summarize_action(o['action'])} ({o['votes']} Stimmen)")
+
+    elif len(options) > 1:
+        actions = [o["action"] for o in options]
+        diff = _diff_keys(actions)
+        totals = [action_amount(a) for a in actions]
+        same_total = len(set(totals)) == 1 and totals[0] is not None
+
+        if diff:
+            common = [k for k in (actions[0].get("args") or {}) if k not in diff]
+            common_text = summarize_action(_subset(actions[0], common),
+                                           with_tool="tool" not in diff, with_total=False)
+            if same_total:
+                common_text += (", " if common_text else "") + f"Summe {format_eur(totals[0])}"
+            if common_text:
+                lines.append(f"Gemeinsam: {common_text}")
+
+        for number, (option, total) in enumerate(zip(options, totals), start=1):
+            if diff:
+                text = summarize_action(_subset(option["action"], diff),
+                                        with_tool="tool" in diff, with_total=False)
+                if not same_total and total is not None:
+                    text += (", " if text else "") + f"Summe {format_eur(total)}"
+            else:
+                text = summarize_action(option["action"])
+            lines.append(f"Option {number}: {text or '–'} ({option['votes']} Stimmen)")
 
     if payload.get("error"):
         lines.append(f"Hinweis: {payload['error']}")
 
-    lines.append("Antworte mit „freigeben“, einer Optionsnummer, einer Korrektur oder „abbrechen“.")
+    if len(options) > 1:
+        lines.append("Antworte mit „freigeben“, einer Optionsnummer, einer Korrektur oder „abbrechen“.")
+    else:
+        lines.append("Antworte mit „freigeben“, einer Korrektur oder „abbrechen“.")
+
     return "\n".join(lines)
 
 
@@ -162,7 +271,9 @@ def format_for_chat(
 
     decision = g.get("decision")
     human = g.get("human_action")
-    action = summarize_action(g.get("chosen_action") or g.get("proposal"))
+    # After a review the executed action can differ from the proposal (select/edit).
+    executed = g.get("final_action") or g.get("chosen_action") or g.get("proposal")
+    action = summarize_action(executed)
     doc = f" ({result['name']})" if result and result.get("name") else ""
 
     if human == "reject":
