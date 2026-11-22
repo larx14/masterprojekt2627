@@ -1,4 +1,18 @@
 
+
+
+
+
+
+import sys
+from pathlib import Path
+
+
+# Das hier muss man hinzufügen, weil er sonst nicht die Module aus anderen Projektordnern findet
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+sys.path.append(str(PROJECT_ROOT))
+
+
 """
 Readable end-to-end integration test for the ERPNext agent.
 
