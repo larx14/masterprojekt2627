@@ -1,3 +1,6 @@
+#Hier wird der Planner gestartet. Die available_tools werden bei jeder Anfrage geladen und an den Graph übergeben.#
+# AKTUELL NUR ger_read_tool_specs() # 
+
 
 from Agent.graph import graph
 from Agent.tools.read_tools import get_read_tool_specs

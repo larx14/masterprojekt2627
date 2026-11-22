@@ -395,13 +395,12 @@ def build_planning_graph(checkpointer=None):
     return builder.compile(checkpointer=checkpointer)
 
 
-# --------------------------------------------------
-# Graph initialization and visualization
-# --------------------------------------------------
+# Graph wird direkt beim Import erstellt
+graph = build_planning_graph()
+
 
 if __name__ == "__main__":
-
-    graph = build_planning_graph()
+    print("Graph erfolgreich erstellt")
 
     output_path = Path("planning_graph_full.png")
 
