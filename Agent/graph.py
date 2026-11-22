@@ -167,6 +167,17 @@ from functools import partial
 from Agent.tools.register_tools import create_tool_registry
 
 tool_registry = create_tool_registry()
+
+
+from Agent.nodes.governance_gate_node import (
+    governance_gate,
+    route_after_governance,
+)
+
+from Agent.nodes.human_review_node import (
+    human_review,
+    route_after_review,
+)
 # --------------------------------------------------
 # Routing functions
 # --------------------------------------------------
@@ -347,20 +358,21 @@ def build_planning_graph(checkpointer=None):
         {
             "execute": "executor",
             "review": "human_review",
+            "sample": "action_preparer",
             "stop": "finalizer",
         }
-    )
+)
 
     # Human approval
     builder.add_conditional_edges(
-        "human_review",
-        route_after_human_review,
-        {
-            "execute": "executor",
-            "prepare": "action_preparer",
-            "stop": "finalizer",
-        }
-    )
+    "human_review",
+    route_after_review,
+    {
+        "execute": "executor",
+        "prepare": "action_preparer",
+        "stop": "finalizer",
+    }
+)
 
     # Execute approved action
     builder.add_edge(
