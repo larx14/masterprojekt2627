@@ -7,6 +7,8 @@ validation and conditional action preparation.
 import operator
 from typing import Annotated, Any, TypedDict
 from Governance.state_fields import GovernanceFields
+from typing import Any, NotRequired
+from typing import Literal, NotRequired
 
 class PlanningState(GovernanceFields, total=False):
 
@@ -62,4 +64,9 @@ class PlanningState(GovernanceFields, total=False):
     # Expected state and verification result for "evaluator.node". So it can compare "IST vs SOLL" and report differences.
     expected_state: dict[str, Any]
     verification_result: dict[str, Any]
-    
+
+    available_tools: NotRequired[list[dict[str, Any]]]
+     
+    evaluation_result: NotRequired[
+        Literal["next", "replan", "completed", "stop"]
+     ]

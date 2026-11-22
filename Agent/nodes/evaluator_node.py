@@ -184,10 +184,10 @@ def compare_states(
     }
 
 
-def evaluator(state: PlanningState) -> dict:
-    """
-    Verify the result of the executed plan step.
-    """
+"""def evaluator(state: PlanningState) -> dict:
+   
+   # Verify the result of the executed plan step.
+    
 
     expected_state = state.get("expected_state")
     checked_at = _now()
@@ -244,3 +244,141 @@ def evaluator(state: PlanningState) -> dict:
             "timestamp": checked_at
         }]
     }
+""" 
+
+def evaluator(state: PlanningState) -> dict:
+    """
+    Evaluate the executed ERPNext action.
+
+    Read operations require successful tool execution.
+    Write operations require expected-state verification.
+    """
+
+    checked_at = _now()
+
+    plan = [step.copy() for step in state.get("plan", [])]
+    current = state.get("current_step", 0)
+    step_results = state.get("step_results") or {}
+
+    if not 0 <= current < len(plan):
+        return {
+            "evaluation_result": "stop",
+            "status": "evaluation_failed",
+        }
+
+    step = plan[current]
+    step_id = step["id"]
+    tool_name = step["tool"]
+
+    # Resolve the trusted tool specification.
+    tool_spec = next(
+        (
+            tool
+            for tool in state.get("available_tools", [])
+            if tool.get("name") == tool_name
+        ),
+        None,
+    )
+
+    if tool_spec is None:
+        return {
+            "evaluation_result": "stop",
+            "status": "evaluation_failed",
+        }
+
+    risk = tool_spec.get("risk")
+
+    execution = step_results.get(step_id) or {}
+
+    # Stop if the executor did not complete successfully.
+    if (
+        state.get("status") != "execution_succeeded"
+        or execution.get("status") != "completed"
+    ):
+        return {
+            "evaluation_result": "replan"
+            if state.get("status") == "execution_failed"
+            else "stop",
+            "status": "evaluation_failed",
+        }
+
+    # Read operations do not require expected-state verification.
+    if risk == "read":
+        comparison = {
+            "result": "verified",
+            "reason": "Read operation completed successfully.",
+            "differences": [],
+        }
+
+    else:
+        expected_state = state.get("expected_state")
+
+        if not expected_state:
+            comparison = {
+                "result": "unknown",
+                "reason": "No expected state was provided.",
+                "differences": [],
+            }
+        else:
+            try:
+                actual_state = fetch_actual_state(expected_state)
+                comparison = compare_states(
+                    expected_state,
+                    actual_state,
+                )
+            except Exception as exc:
+                comparison = {
+                    "result": "unknown",
+                    "reason": f"{type(exc).__name__}: {exc}",
+                    "differences": [],
+                }
+
+    verification_result = {
+        **comparison,
+        "expected_state": state.get("expected_state"),
+        "checked_at": checked_at,
+    }
+
+    # Do not advance the plan if verification failed.
+    if comparison["result"] != "verified":
+        return {
+            "verification_result": verification_result,
+            "evaluation_result": (
+                "replan"
+                if comparison["result"] == "mismatch"
+                else "stop"
+            ),
+            "status": (
+                "verification_failed"
+                if comparison["result"] == "mismatch"
+                else "verification_unknown"
+            ),
+        }
+
+    # Mark the current step as completed.
+    plan[current]["status"] = "completed"
+
+    next_step = current + 1
+    completed = next_step >= len(plan)
+
+    return {
+        "plan": plan,
+        "current_step": next_step,
+        "verification_result": verification_result,
+        "evaluation_result": (
+            "completed" if completed else "next"
+        ),
+        "status": (
+            "completed" if completed else "step_completed"
+        ),
+        "history": [{
+            "event": "verification_completed",
+            "step_id": step_id,
+            "tool": tool_name,
+            "risk": risk,
+            "result": comparison["result"],
+            "reason": comparison["reason"],
+            "timestamp": checked_at,
+        }],
+    }
+

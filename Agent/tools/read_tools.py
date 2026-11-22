@@ -18,7 +18,7 @@ from Agent.tools.erpnext_client import ERPNextError
 from Agent.tools.registry import AVAILABLE_DOCTYPES, render_registry_overview
 
 LIMIT = 20
-RESULT_FIELDS = {"found": "bool", "count": "int", "name": "str"}
+RESULT_FIELDS = {"found": "bool", "count": "int", "name": "str", "data": "list"}
 
 
 def get_read_tool_specs() -> list[dict]:

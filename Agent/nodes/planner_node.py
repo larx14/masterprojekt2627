@@ -9,9 +9,11 @@ from Agent.models import Plan
 from Agent.state import PlanningState
 
 from config.llm_connection import get_deepseek
+from Agent.tools.read_tools import get_read_tool_specs
 
 # Connect to LLM 
 llm = get_deepseek() 
+available_tools = get_read_tool_specs()
 
 
 # THe planner prompt might need to change depending on autonomy level (because right now, it is not allowed to invent or assume values)
@@ -152,9 +154,8 @@ def planner(state: PlanningState) -> dict:
         "instruction", ""
     ).strip()
 
-    available_tools = state.get(
-        "available_tools", []
-    )
+    available_tools = state.get("available_tools") or get_read_tool_specs()
+    
 
     def reject(reason: str) -> dict:
         """

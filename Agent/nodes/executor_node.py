@@ -167,6 +167,10 @@ def _normalize_result(
 
         value = raw_result[field_name]
 
+        if field_name == "name" and value is None:
+            normalized[field_name] = None
+            continue
+
         if not isinstance(value, expected_type):
             raise TypeError(
                 f"Invalid type for result field '{field_name}'."
