@@ -223,24 +223,6 @@ def route_after_condition(
     return "stop"
 
 
-def route_after_governance(
-    state: PlanningState
-) -> Literal["execute", "review", "stop"]:
-    """
-    Route the workflow based on the governance decision.
-    """
-
-    governance = state.get("governance") or {}
-    decision = governance.get("decision")
-
-    if decision == "auto":
-        return "execute"
-
-    if decision == "review":
-        return "review"
-
-    return "stop"
-
 
 def route_after_human_review(
     state: PlanningState

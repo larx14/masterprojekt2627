@@ -9,10 +9,35 @@ AVAILABLE_DOCTYPES: dict[str, list[str]] = {
     "Item": ["name", "item_code", "item_name", "item_group", "stock_uom", "disabled"],
     "Warehouse": ["name", "warehouse_name", "company", "disabled"],
     "Bin": ["name", "item_code", "warehouse", "actual_qty", "reserved_qty", "projected_qty"],
-    "Purchase Order": ["name", "supplier", "status", "transaction_date", "grand_total"],
+    "Purchase Order": ["name", "supplier", "status", "transaction_date", "grand_total", "docstatus",],
     "Sales Order": ["name", "customer", "status", "transaction_date", "delivery_date", "grand_total"],
     "BOM": ["name", "item", "quantity", "is_active", "is_default"],
     "Work Order": ["name", "production_item", "status", "qty", "produced_qty"],
+    "Material Request": [ "name", "company", "material_request_type", "transaction_date", "schedule_date", "status", "docstatus", ],
+    "Purchase Receipt": ["name", "supplier", "company", "posting_date", "status", "docstatus", ],
+    "Purchase Invoice": ["name", "supplier", "company", "posting_date", "bill_no", "bill_date", "grand_total", "outstanding_amount", "status", "docstatus",],
+
+"Payment Entry": [
+    "name",
+    "company",
+    "payment_type",
+    "party_type",
+    "party",
+    "posting_date",
+    "reference_no",
+    "reference_date",
+    "paid_amount",
+    "docstatus",
+],
+"Account": [
+    "name",
+    "account_name",
+    "account_type",
+    "company",
+    "is_group",
+    "disabled",
+],
+
 }
 
 WRITE_DOCTYPES = {

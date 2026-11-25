@@ -318,6 +318,12 @@ def executor(
             specification,
         )
 
+        expected_state = build_expected_state(
+            tool_name=tool_name,
+            args=action["args"],
+            result=normalized_result,
+)
+
         step_results[step_id] = {
             "status": "completed",
             "result": normalized_result,
@@ -326,6 +332,7 @@ def executor(
 
         return {
             "step_results": step_results,
+            "expected_state": expected_state,
             "prepared_action": {},
             "candidates": [],
             "n_requested": 0,
@@ -366,3 +373,36 @@ def executor(
                 )
             ],
         }
+def build_expected_state(
+    tool_name: str,
+    args: dict[str, Any],
+    result: dict[str, Any],
+) -> dict[str, Any]:
+    """
+    Build the expected ERPNext state for a successful
+    write operation.
+    """
+
+    if tool_name not in {"erp_create", "erp_submit"}:
+        return {}
+
+    doctype = args["doctype"]
+
+    if tool_name == "erp_create":
+        name = result["name"]
+        expected_docstatus = 0
+
+    else:
+        name = args["name"]
+        expected_docstatus = 1
+
+    return {
+        "doctype": doctype,
+        "identity": {
+            "name": name,
+        },
+        "expected_exists": True,
+        "expected_fields": {
+            "docstatus": expected_docstatus,
+        },
+    }
