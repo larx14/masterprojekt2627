@@ -70,3 +70,5 @@ class PlanningState(GovernanceFields, total=False):
     evaluation_result: NotRequired[
         Literal["next", "replan", "completed", "stop"]
      ]
+
+    response: str         

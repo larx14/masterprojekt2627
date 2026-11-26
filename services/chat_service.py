@@ -3,6 +3,7 @@ import json
 
 from config.db_connection import db
 from services.agent_service import AgentService
+from services.activity_service import ActivityService
 
 
 class ChatService:
@@ -32,51 +33,26 @@ class ChatService:
         )
 
     @staticmethod
-    def send_message(process_id, message):
+    def run_agent(process_id, message):
+        """
+        Läuft im Hintergrund. Die User-Nachricht wurde schon gespeichert.
+        """
 
-        # 1. User-Nachricht speichern
-        ChatService.save_message(
-            process_id,
-            "user",
-            message
-        )
+        def notify(text):
+            ChatService.save_message(process_id, "assistant", text)
 
         try:
-            # 2. LangGraph aufrufen
-            result = AgentService.process_instruction(message)
-
-            # 3. Agent-Antwort lesbar aufbereiten
-            response = json.dumps(
-                result,
-                ensure_ascii=False,
-                indent=2,
-                default=str
+            result = AgentService.process_instruction(
+                message,
+                process_id=process_id,
+                notify=notify,
             )
-
-            # 4. Agent-Antwort speichern
-            ChatService.save_message(
-                process_id,
-                "assistant",
-                response
-            )
-
-            return {
-                "status": "success",
-                "response": response,
-                "agent_result": result
-            }
+            notify(result["message"])
 
         except Exception as exc:
+            notify(f"Bei der Verarbeitung ist ein Fehler aufgetreten: {exc}")
 
-            # Fehler ebenfalls im Chat sichtbar machen
-            error_message = (
-                f"Bei der Verarbeitung ist ein Fehler aufgetreten: {exc}"
-            )
-
-            ChatService.save_message(
-                process_id,
-                "assistant",
-                error_message
-            )
-
-            raise
+        finally:
+            # Erst NACH der letzten Nachricht beenden, damit das
+            # Frontend beim letzten Abruf alles sieht.
+            ActivityService.finish(process_id)

@@ -161,6 +161,7 @@ from Agent.nodes.governance_gate_node import governance_gate
 from Agent.nodes.human_review_node import human_review
 from Agent.nodes.executor_node import executor
 from Agent.nodes.evaluator_node import evaluator
+from Agent.nodes.responder_node import responder
 
 from functools import partial
 
@@ -285,6 +286,7 @@ def build_planning_graph(checkpointer=None):
 
     builder.add_node("replanner", replanner)
     builder.add_node("finalizer", finalizer)
+    builder.add_node("responder", responder)
 
     # Entry point
     builder.add_edge(START, "planner")
@@ -384,7 +386,8 @@ def build_planning_graph(checkpointer=None):
     )
 
     # Finalization
-    builder.add_edge("finalizer", END)
+    builder.add_edge("finalizer", "responder")
+    builder.add_edge("responder", END)
 
     return builder.compile(checkpointer=checkpointer)
 

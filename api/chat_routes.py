@@ -1,10 +1,9 @@
-
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 
 from services.process_service import ProcessService
 from services.chat_service import ChatService
-
+from services.activity_service import ActivityService
 
 router = APIRouter(prefix="/processes", tags=["Chat"])
 
@@ -16,27 +15,26 @@ class ChatMessage(BaseModel):
 
 
 @router.post("/{process_id}/messages")
-def send_message(process_id: str, request: ChatMessage):
+def send_message(process_id: str, request: ChatMessage, background_tasks: BackgroundTasks):
 
     process = ProcessService.get_process(process_id)
 
     if not process:
+        raise HTTPException(status_code=404, detail="Process not found")
+
+    if ActivityService.is_running(process_id):
         raise HTTPException(
-            status_code=404,
-            detail="Process not found"
+            status_code=409,
+            detail="Der Agent arbeitet noch an der vorherigen Anfrage."
         )
 
-    try:
-        return ChatService.send_message(
-            process_id,
-            request.message
-        )
+    ChatService.save_message(process_id, "user", request.message)
 
-    except Exception as exc:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Agent-Verarbeitung fehlgeschlagen: {exc}"
-        )
+    # Vor dem Start setzen, damit das erste Polling schon "running" sieht
+    ActivityService.start(process_id, "Starte …")
+    background_tasks.add_task(ChatService.run_agent, process_id, request.message)
+
+    return {"status": "started"}
 
 
 
@@ -74,3 +72,7 @@ def get_chat_messages(process_id: str):
             status_code=500,
             detail="Chatnachrichten konnten nicht geladen werden."
         )
+
+@router.get("/{process_id}/activity")
+def get_activity(process_id: str):
+    return ActivityService.get(process_id)
