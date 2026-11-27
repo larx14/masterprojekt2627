@@ -55,6 +55,29 @@ def _num(value: Any) -> str:
     return f"{value:g}".replace(".", ",")
 
 
+def _flat(action: dict[str, Any] | None) -> dict[str, Any] | None:
+    """
+    Pack args.data aus (erp_create verpackt alle Felder in "data").
+
+    {"tool": "erp_create", "args": {"doctype": "Purchase Order", "data": {"supplier": ...}}}
+    ->
+    {"tool": "erp_create", "args": {"doctype": "Purchase Order", "supplier": ...}}
+
+    Danach finden summarize_action() und _diff_keys() Lieferant,
+    Positionen und Datum direkt in args.
+    """
+
+    if not action:
+        return action
+
+    args = action.get("args") or {}
+
+    if isinstance(args.get("data"), dict):
+        return {**action, "args": {"doctype": args.get("doctype"), **args["data"]}}
+
+    return action
+
+
 def summarize_action(
     action: dict[str, Any] | None,
     with_tool: bool = True,
@@ -64,6 +87,9 @@ def summarize_action(
 
     if not action:
         return "keine Aktion"
+
+    # erp_create: Felder aus args.data nach oben holen
+    action = _flat(action)
 
     args = action.get("args") or {}
     parts = []
@@ -76,6 +102,12 @@ def summarize_action(
 
     if args.get("customer"):
         parts.append(f"Kunde {args['customer']}")
+
+    if args.get("company"):
+        parts.append(f"Firma {args['company']}")
+
+    if args.get("transaction_date"):
+        parts.append(f"Datum {args['transaction_date']}")
 
     items = args.get("items")
     if isinstance(items, list):
@@ -195,7 +227,13 @@ def format_escalation(payload: dict[str, Any]) -> str:
                      f"oder mit „abbrechen“.")
         return "\n".join(lines)
 
-    options = [o for o in payload.get("options", []) if o.get("executable", True)]
+    # erp_create: Felder aus args.data nach oben holen, damit der Vergleich
+    # der Optionen die echten Felder zeigt (statt des ganzen data-JSON)
+    options = [
+        {**o, "action": _flat(o.get("action"))}
+        for o in payload.get("options", [])
+        if o.get("executable", True)
+    ]
     risk = RISK_LABELS.get(payload.get("risk"), payload.get("risk") or "?")
     top_votes = (payload.get("options") or [{}])[0].get("votes")
 
@@ -248,7 +286,9 @@ def format_escalation(payload: dict[str, Any]) -> str:
             lines.append(f"Option {number}: {text or '–'} ({option['votes']} Stimmen)")
 
     if payload.get("error"):
-        lines.append(f"Hinweis: {payload['error']}")
+        # Der technische Fehlertext aus validate_answer() ist englisch,
+        # im Chat reicht ein kurzer deutscher Hinweis.
+        lines.append("Hinweis: Das habe ich nicht verstanden.")
 
     if len(options) > 1:
         lines.append("Antworte mit „freigeben“, einer Optionsnummer, einer Korrektur oder „abbrechen“.")

@@ -6,23 +6,33 @@ import json
 
 from Agent.state import PlanningState
 from config.llm_connection import get_deepseek
+from Agent.context import format_history, format_process
 
 llm = get_deepseek()
 
 PROMPT = """Du bist ein ERPNext-Assistent und antwortest einem Mitarbeiter im Chat.
 
-Anfrage des Mitarbeiters:
+Prozess:
+{process}
+
+Bisheriger Chatverlauf:
+{history}
+
+Aktuelle Nachricht des Mitarbeiters:
 {instruction}
 
-Ergebnis (einzige Datenquelle):
+Ergebnis (einzige Quelle für ERP-Daten):
 {data}
 
 Regeln:
-- Verwende nur Daten aus dem Ergebnis, erfinde nichts.
+- ERP-Daten nur aus dem Ergebnis verwenden, nichts erfinden.
 - Gefundene Datensätze übersichtlich als Liste ausgeben.
 - Fehlen Informationen oder wurde abgebrochen: kurz erklären und konkret nachfragen.
+- Ist die Nachricht keine Aufgabe (Smalltalk, eine Aussage): natürlich darauf
+  eingehen, statt sie als Auftrag zu behandeln.
 - Keine technischen Begriffe (Step, Tool, JSON, Plan).
-- Antworte auf Deutsch und kurz.
+- Kein Markdown (keine Sternchen, keine Überschriften). Aufzählungen mit "- ".
+- Duze den Mitarbeiter. Antworte auf Deutsch und kurz.
 """
 
 
@@ -39,6 +49,8 @@ def responder(state: PlanningState) -> dict:
     }
 
     prompt = PROMPT.format(
+        process=format_process(state),
+        history=format_history(state),
         instruction=state.get("instruction", ""),
         data=json.dumps(data, ensure_ascii=False, default=str),
     )

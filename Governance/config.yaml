@@ -28,6 +28,9 @@ ignore_fields:
   - reason
   - title
   - notes
+  - docstatus
+  - uom
+  - conversion_factor
 
 # Wie viele konkurrierende Varianten der Mensch bei einer Eskalation sieht
 max_options: 3

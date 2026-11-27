@@ -9,6 +9,7 @@ from typing import Any
 
 from Agent.tools import erpnext_client as client
 from Agent.tools.erpnext_client import ERPNextError
+from Agent.tools.registry import render_required_fields
 
 # Preliminary MVP (Purchase-to-Pay)
 SUPPORTED_DOCTYPES = frozenset({
@@ -44,7 +45,9 @@ def get_create_tool_specs() -> list[dict[str, Any]]:
             "Purchase Invoice, Payment Entry. Use verified field names and "
             "business values. For documents based on earlier documents, "
             "preserve source-document and source-row references. "
-            "This tool never submits documents."
+            "This tool never submits documents. "
+            "Never set name or docstatus.\n"
+            + render_required_fields()
         ),
         "risk": "draft",
         "parameters": {"doctype": "str", "data": "dict"},

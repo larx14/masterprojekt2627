@@ -1,4 +1,3 @@
-
 import json
 from datetime import datetime, timezone
 
@@ -11,9 +10,11 @@ from Agent.state import PlanningState
 from config.llm_connection import get_deepseek
 from Agent.tools.read_tools import get_read_tool_specs
 
+
+from Agent.context import format_history, format_process
+
 # Connect to LLM 
 llm = get_deepseek() 
-available_tools = get_read_tool_specs()
 
 
 # THe planner prompt might need to change depending on autonomy level (because right now, it is not allowed to invent or assume values)
@@ -25,6 +26,31 @@ instruction into a structured business process plan.
 
 EMPLOYEE INSTRUCTION:
 {instruction}
+
+PROCESS CONTEXT:
+{process}
+
+CHAT HISTORY (oldest first, for context only):
+{history}
+
+KNOWN FACTS (verified in earlier runs):
+{facts}
+
+CONTEXT RULES:
+- The EMPLOYEE INSTRUCTION is the current request. Use the chat history
+  only to understand it.
+- Resolve references to earlier messages (e.g. "and only the ones from
+  Germany?" refers to the previous request).
+- If the assistant asked for missing information and the employee now
+  answers it, combine the answer with the original request into one plan.
+- Values the employee stated in the chat history count as provided
+  information (rule 10 still applies to everything else).
+- Records listed in KNOWN FACTS are already verified. Do not plan lookups
+  for them again; use their values directly.
+- Before any erp_create, add lookup steps that resolve every link field
+  (company, supplier, item_code, warehouse) to an existing record.
+  If the employee names no company, look up Company; if exactly one
+  exists, use it.
 
 AVAILABLE TOOLS:
 {tools}
@@ -119,6 +145,7 @@ FOR EACH STEP:
 - Provide a brief reason for including the step.
 - Specify prerequisite step IDs in depends_on.
 - Define execution_condition only when necessary.
+- Write the description in German.
 
 OUTPUT REQUIREMENTS:
 
@@ -198,6 +225,9 @@ def planner(state: PlanningState) -> dict:
     # and available tool definitions.
     prompt = PLANNER_PROMPT.format(
         instruction=instruction,
+        process=format_process(state),
+        history=format_history(state),
+        facts=json.dumps(state.get("facts") or {}, ensure_ascii=False, default=str),
         tools=json.dumps(
             available_tools,
             ensure_ascii=False,

@@ -71,4 +71,7 @@ class PlanningState(GovernanceFields, total=False):
         Literal["next", "replan", "completed", "stop"]
      ]
 
-    response: str         
+    response: str # The final response to be sent to the user (Responder Node)
+    # Conversation and process context
+    chat_history: list[dict[str, Any]]   # last chat messages: {"role", "content"}
+    process_context: dict[str, Any]      # name and description from process_list         

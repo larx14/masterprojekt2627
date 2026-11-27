@@ -6,6 +6,7 @@ die er sieht und filtern kann. Neuer DocType = eine Zeile.
 AVAILABLE_DOCTYPES: dict[str, list[str]] = {
     "Supplier": ["name", "supplier_name", "supplier_group", "country", "disabled"],
     "Customer": ["name", "customer_name", "customer_group", "territory", "disabled"],
+    "Company": ["name", "company_name", "default_currency", "country"],
     "Item": ["name", "item_code", "item_name", "item_group", "stock_uom", "disabled"],
     "Warehouse": ["name", "warehouse_name", "company", "disabled"],
     "Bin": ["name", "item_code", "warehouse", "actual_qty", "reserved_qty", "projected_qty"],
@@ -48,6 +49,37 @@ WRITE_DOCTYPES = {
     "Payment Entry",
     "Supplier",
 }
+
+
+# Pflichtfelder pro DocType für erp_create.
+# Wird an die Tool-Beschreibung von erp_create angehängt, damit Planner und
+# Action Preparer wissen, welche Felder ERPNext beim Anlegen verlangt.
+# Ein hier genannter Default gilt als "explizit definiert" (Regel 6 des
+# Action Preparers) und darf daher verwendet werden.
+REQUIRED_FIELDS: dict[str, str] = {
+    "Purchase Order": (
+        "supplier, company, transaction_date, schedule_date, "
+        "items[item_code, qty, rate, schedule_date]. "
+        "Default: schedule_date = transaction_date, if not given."
+    ),
+    "Material Request": (
+        "material_request_type, company, transaction_date, schedule_date, "
+        "items[item_code, qty, schedule_date, warehouse]. "
+        "Default: schedule_date = transaction_date, if not given."
+    ),
+    "Purchase Receipt": "supplier, company, posting_date, items[item_code, qty, rate, warehouse]",
+    "Purchase Invoice": "supplier, company, posting_date, items[item_code, qty, rate]",
+    "Payment Entry": "payment_type, party_type, party, company, posting_date, paid_amount",
+    "Supplier": "supplier_name, supplier_group",
+}
+
+
+def render_required_fields() -> str:
+    """Pflichtfelder als Text für die Tool-Beschreibung von erp_create."""
+    lines = ["Required fields per DocType (all must be set):"]
+    for doctype, fields in REQUIRED_FIELDS.items():
+        lines.append(f"- {doctype}: {fields}")
+    return "\n".join(lines)
 
 
 def render_registry_overview() -> str:

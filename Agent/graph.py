@@ -148,6 +148,7 @@ from typing import Literal
 from langgraph.graph import StateGraph, START, END
 
 from Agent.state import PlanningState
+from config.db_connection import checkpointer
 
 from Agent.nodes.planner_node import planner
 from Agent.nodes.plan_validator_node import plan_validator
@@ -393,7 +394,7 @@ def build_planning_graph(checkpointer=None):
 
 
 # Graph wird direkt beim Import erstellt
-graph = build_planning_graph()
+graph = build_planning_graph(checkpointer=checkpointer)
 
 
 if __name__ == "__main__":

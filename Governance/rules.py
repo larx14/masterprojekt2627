@@ -24,7 +24,10 @@ def format_eur(value: float) -> str:
 
 def action_amount(action: dict[str, Any] | None) -> float | None:
     """Total amount of an action, or None if it cannot be determined."""
-    return _amount((action or {}).get("args") or {})
+    args = (action or {}).get("args") or {}
+    if isinstance(args.get("data"), dict):
+        args = args["data"]
+    return _amount(args)
 
 
 def _amount(args: dict[str, Any]) -> float | None:
