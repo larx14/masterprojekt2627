@@ -42,6 +42,9 @@ def responder(state: PlanningState) -> dict:
         "outcome": (state.get("final_result") or {}).get("outcome"),
         "missing_info": state.get("missing_info"),
         "abort_reason": state.get("abort_reason"),
+        # Summary of the Finalizer, explains why a run stopped
+        # (e.g. a condition could not be evaluated).
+        "summary": (state.get("final_result") or {}).get("message"),
         "results": [
             (r.get("result") or {}).get("data")
             for r in (state.get("step_results") or {}).values()

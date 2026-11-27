@@ -13,7 +13,8 @@ from datetime import datetime, timezone
 from typing import Any
 
 from Agent.state import PlanningState
-from Agent.tools.read_tools import run_read_tool
+from Agent.tools import erpnext_client as client
+from Agent.tools.erpnext_client import ERPNextError
 
 
 def _now() -> str:
@@ -58,10 +59,18 @@ def fetch_actual_state(
 
     query = build_verification_query(expected_state)
 
-    return run_read_tool(
-        "erp_search",
-        query
-    )
+    # Request exactly the fields that are checked. The read tool only
+    # returns the fields listed in the registry, so a checked field
+    # like docstatus could be missing and look like a wrong value.
+    # Limit 2 is enough to detect duplicates.
+    fields = ["name", *(expected_state.get("expected_fields") or {})]
+
+    try:
+        rows = client.get_list(query["doctype"], query["filters"], fields, 2)
+    except ERPNextError as exc:
+        return {"status": "failed", "result": None, "errors": [repr(exc)]}
+
+    return {"status": "completed", "result": {"data": rows}}
 
 
 def compare_states(

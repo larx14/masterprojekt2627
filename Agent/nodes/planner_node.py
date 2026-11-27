@@ -51,6 +51,10 @@ CONTEXT RULES:
   (company, supplier, item_code, warehouse) to an existing record.
   If the employee names no company, look up Company; if exactly one
   exists, use it.
+- Employees often give the record ID (the ERPNext "name", e.g.
+  "Raw Materials Store - MP" or "RM-001"). Look such values up with
+  the field "name", not with a display field like warehouse_name or
+  item_name, because the display name has no company suffix.
 
 AVAILABLE TOOLS:
 {tools}

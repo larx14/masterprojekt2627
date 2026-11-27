@@ -149,6 +149,42 @@ def step_status(step: dict[str, Any], step_results: dict[str, Any]) -> str:
     return record.get("status") or step.get("status", "pending")
 
 
+def fallback_reasons(state: PlanningState) -> list[str]:
+    """
+    Read the failure reason from the Executor and Evaluator
+    fields when no replan_reason was set.
+    """
+
+    parts = []
+
+    # Special case: the tool call itself failed (Executor).
+    error = (state.get("execution_error") or "").strip()
+    if error:
+        parts.append(f"The last step failed: {error}")
+
+    # Special case: the tool call worked, but the check afterwards
+    # failed (Evaluator). The change already exists in ERPNext.
+    verification = state.get("verification_result") or {}
+    if state.get("status") == "verification_failed" and verification:
+        expected = verification.get("expected_state") or {}
+        doctype = expected.get("doctype")
+        name = (expected.get("identity") or {}).get("name")
+        differences = json.dumps(
+            verification.get("differences") or [],
+            ensure_ascii=False,
+            default=str
+        )
+
+        target = f" ({doctype} '{name}')" if doctype and name else ""
+        parts.append(
+            f"The last step was executed{target}, but the check afterwards "
+            f"failed: {verification.get('reason') or 'unknown'} {differences}. "
+            "The change already exists in ERPNext. Do not repeat this step."
+        )
+
+    return parts
+
+
 def collect_reason(state: PlanningState) -> str:
     """
     Combine the reported failure with the validation
@@ -160,6 +196,9 @@ def collect_reason(state: PlanningState) -> str:
     reason = (state.get("replan_reason") or "").strip()
     if reason:
         parts.append(reason)
+    else:
+        # Special case: Executor and Evaluator do not set replan_reason.
+        parts.extend(fallback_reasons(state))
 
     # Special case: a revised plan was rejected by the Plan Validator.
     if state.get("status") == "plan_invalid":
@@ -237,6 +276,8 @@ def replanner(state: PlanningState) -> dict:
         return {
             "status": status,
             "abort_reason": message,
+            # Pass the reason on, the Finalizer shows it as last error.
+            "replan_reason": reason,
             "prepared_action": {},
             "candidates": [],
             "n_requested": 0,
@@ -251,12 +292,13 @@ def replanner(state: PlanningState) -> dict:
         }
 
     # Special case: limit reached, stop without calling the LLM.
-    # The counter is per process and is never reset.
+    # The counter counts per run (the chat resets it for every new instruction).
     if attempt > MAX_REPLANS:
         return stop(
             "replan_limit_reached",
             f"The plan was already revised {MAX_REPLANS} times. "
-            "A human has to decide how to continue."
+            "A human has to decide how to continue. "
+            f"Last error: {reason}"
         )
 
     # Validate the minimum required inputs.

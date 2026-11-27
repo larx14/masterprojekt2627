@@ -4,7 +4,8 @@ die er sieht und filtern kann. Neuer DocType = eine Zeile.
 """
 
 AVAILABLE_DOCTYPES: dict[str, list[str]] = {
-    "Supplier": ["name", "supplier_name", "supplier_group", "country", "disabled"],
+    "Supplier": ["name", "supplier_name", "supplier_group", "country", "disabled", "docstatus"],
+    "Supplier Group": ["name", "parent_supplier_group", "is_group"],
     "Customer": ["name", "customer_name", "customer_group", "territory", "disabled"],
     "Company": ["name", "company_name", "default_currency", "country"],
     "Item": ["name", "item_code", "item_name", "item_group", "stock_uom", "disabled"],
