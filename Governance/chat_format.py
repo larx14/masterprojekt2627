@@ -291,7 +291,7 @@ def format_escalation(payload: dict[str, Any]) -> str:
         lines.append("Hinweis: Das habe ich nicht verstanden.")
 
     if len(options) > 1:
-        lines.append("Antworte mit „freigeben“, einer Optionsnummer, einer Korrektur oder „abbrechen“.")
+        lines.append("Antworte mit „freigeben“, einer Optionsnummer, einer Korrektur oder „abbrechen“ oder „provide_info“.")
     else:
         lines.append("Antworte mit „freigeben“, einer Korrektur oder „abbrechen“.")
 
