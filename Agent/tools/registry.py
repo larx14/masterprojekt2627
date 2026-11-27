@@ -1,10 +1,11 @@
+
 """
 Registry: welche DocTypes der Agent lesen darf, mit den Feldern,
 die er sieht und filtern kann. Neuer DocType = eine Zeile.
 """
 
 AVAILABLE_DOCTYPES: dict[str, list[str]] = {
-    "Supplier": ["name", "supplier_name", "supplier_group", "country", "disabled", "docstatus"],
+    "Supplier": ["name", "supplier_name", "supplier_group", "country", "disabled"],
     "Supplier Group": ["name", "parent_supplier_group", "is_group"],
     "Customer": ["name", "customer_name", "customer_group", "territory", "disabled"],
     "Company": ["name", "company_name", "default_currency", "country"],
@@ -66,7 +67,9 @@ REQUIRED_FIELDS: dict[str, str] = {
     "Material Request": (
         "material_request_type, company, transaction_date, schedule_date, "
         "items[item_code, qty, schedule_date, warehouse]. "
-        "Default: schedule_date = transaction_date, if not given."
+        "Default: schedule_date = transaction_date, if not given. "
+        "Default: material_request_type = Purchase when the employee wants to "
+        "buy, order or procure (beschaffen, bestellen, kaufen)."
     ),
     "Purchase Receipt": "supplier, company, posting_date, items[item_code, qty, rate, warehouse]",
     "Purchase Invoice": "supplier, company, posting_date, items[item_code, qty, rate]",

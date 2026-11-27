@@ -136,7 +136,8 @@ def check_rules(
     if risk == "read":
         return []
 
-    facts = facts or {}
+    facts = facts or {}   
+    action = _flat(action)
     hits = []
 
     for rule in RULES:
@@ -159,6 +160,7 @@ def describe_hits(
     """
 
     facts = facts or {}
+    action = _flat(action)
     details = []
 
     for hit in hits:
@@ -180,3 +182,10 @@ def describe_hits(
             details.append(f"Regel {hit} greift.")
 
     return details
+
+def _flat(action):
+    action = action or {}
+    args = action.get("args") or {}
+    if isinstance(args.get("data"), dict):
+        return {**action, "args": {"doctype": args.get("doctype"), **args["data"]}}
+    return action

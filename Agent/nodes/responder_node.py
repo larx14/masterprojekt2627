@@ -33,6 +33,9 @@ Regeln:
 - Keine technischen Begriffe (Step, Tool, JSON, Plan).
 - Kein Markdown (keine Sternchen, keine Überschriften). Aufzählungen mit "- ".
 - Duze den Mitarbeiter. Antworte auf Deutsch und kurz.
+- Wurden als Ersatz Kandidaten gesucht (z. B. weil "Mehl" nichts ergab):
+  die passendsten als nummerierte Vorschläge zeigen ("Meintest du 1. Wheat
+  Flour Type 550 …?") und um Auswahl bitten.
 """
 
 

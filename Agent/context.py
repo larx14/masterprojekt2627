@@ -5,7 +5,7 @@ Formatiert Chatverlauf und Prozesskontext für LLM-Prompts.
 from Agent.state import PlanningState
 
 
-def format_history(state: PlanningState, max_chars: int = 500) -> str:
+def format_history(state: PlanningState, max_chars: int = 2000) -> str:
     lines = [
         f"{'Mitarbeiter' if m.get('role') == 'user' else 'Assistent'}: "
         f"{(m.get('content') or '')[:max_chars]}"

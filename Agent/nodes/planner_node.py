@@ -55,6 +55,21 @@ CONTEXT RULES:
   "Raw Materials Store - MP" or "RM-001"). Look such values up with
   the field "name", not with a display field like warehouse_name or
   item_name, because the display name has no company suffix.
+- ERPNext master data (item names, groups) is stored in English.
+  Translate the employee's terms before searching (e.g. "Mehl" -> "flour")
+  and search with a short keyword: ["item_name", "like", "%flour%"].
+- For every name lookup, add a fallback step right after it with
+  execution_condition found = false that searches more broadly
+  (another keyword, the item_group, or filters [] to list candidates).
+  Then the employee can pick from real records instead of retyping names.
+- A name the employee gives for a record is always resolved with a lookup
+  step. Never report it as missing_info or ask for confirmation when a
+  lookup can check it.
+- If the employee asks for suggestions or options, or required master data
+  is missing, plan read-only lookups instead of aborting with missing_info.
+  Only report missing_info for values that cannot be looked up
+  (e.g. quantity, price).
+
 
 AVAILABLE TOOLS:
 {tools}

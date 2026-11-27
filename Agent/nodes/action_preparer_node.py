@@ -52,6 +52,9 @@ EXISTING ERP DOCUMENTS:
 RESULTS OF PREVIOUS STEPS:
 {step_results}
 
+TODAY:
+{today}
+
 RULES:
 
 1. Prepare arguments exclusively for the tool specified
@@ -92,6 +95,10 @@ RULES:
     Conditional execution is handled by a downstream component.
 
 14. Do not modify the plan or select another plan step.
+
+
+15. Dates without a year refer to the current year (see TODAY).
+    If no transaction or posting date is given, use TODAY.
 
 OUTPUT REQUIREMENTS:
 
@@ -355,6 +362,7 @@ def action_preparer(state: PlanningState) -> dict[str, Any]:
         goal=state.get("goal", ""),
         step=_dump(step),
         tool=_dump(selected_tool),
+        today=datetime.now(timezone.utc).date().isoformat(),
         facts=_dump(state.get("facts") or {}),
         artifacts=_dump(state.get("artifacts") or {}),
         step_results=_dump(

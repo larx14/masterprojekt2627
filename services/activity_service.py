@@ -1,6 +1,8 @@
 """
 Flüchtiger Fortschrittsstatus pro Prozess (eine Zeile im Frontend).
 Liegt im Speicher: reicht für einen uvicorn-Worker, geht bei Neustart verloren.
+Zeigt einfach an "Planning... validated plan...." etc.
+
 """
 
 import threading
